@@ -8,19 +8,49 @@ export function isStanding(p) {
     return length>0&&(ux*vx+uy*vy)/length<-.88;
   });
 }
+export function calibrationHint(p,w) {
+  if(!p||![0,11,12,23,24,25,26,27,28].every(i=>Number.isFinite(p[i]?.x)&&Number.isFinite(p[i]?.y)&&(p[i].visibility??0)>=.6&&p[i].x>0&&p[i].x<1&&p[i].y>0&&p[i].y<1))return '全身を映してください';
+  const torso=(p[23].y+p[24].y-p[11].y-p[12].y)/2;
+  const worldTorso=w?.[24]&&Math.hypot(w[23].y-w[11].y,w[23].z-w[11].z);
+  if(Math.abs(p[11].x-p[12].x)<Math.max(.025,torso*.3)||(worldTorso&&Math.abs(w[11].z-w[12].z)>worldTorso*.65))return '正面を向いてください';
+  return isStanding(p)?'少し静止してください':'膝と上体を伸ばしてください';
+}
+export const CALIBRATION_FRAMES=12;
+/** 新着のPoseMeasuresと取得時刻(ms)を蓄積する。ready時だけbaselineを返す。カメラ非依存。 */
 export class AutoCalibration {
   constructor(){this.reset();}
-  reset(){this.anchor=null;this.samples=[];this.started=0;this.last=0;}
-  update(now,m,standing=true){
-    if(!m||!standing){this.reset();return {progress:0,ready:false};}
-    const a=this.anchor;
-    const stable=a&&now-this.last<750&&['hipX','hipY','shoulderY','feet'].every(k=>Math.abs(m[k]-a[k])<a.torso*.08)&&Math.abs(m.torso-a.torso)<a.torso*.12&&Math.abs(m.lean-a.lean)<.2;
-    if(!stable){this.reset();this.anchor={...m};this.started=now;}
-    this.last=now;this.samples.push({...m});
-    const progress=Math.min(1,(now-this.started)/3000);
-    const ready=progress===1&&this.samples.length>=15;
-    let baseline=null;
-    if(ready){baseline={};for(const k of Object.keys(m))baseline[k]=this.samples.reduce((sum,s)=>sum+s[k],0)/this.samples.length;}
-    return {progress,ready,baseline};
+  reset(){this.samples=[];this.last=-Infinity;this.lastGood=-Infinity;this.streak=0;}
+  pause(now){
+    this.samples=this.samples.filter(s=>now-s.time<=5000);
+    if(now-this.lastGood>750){this.samples=this.samples.slice(-6);this.streak=0;}
+    return this.result(false);
+  }
+  update(now,m,valid=true){
+    if(!Number.isFinite(now)||now<=this.last)return this.result(false);
+    this.pause(now);this.last=now;
+    if(!valid||!m||m.torso<.07||!Object.values(m).every(Number.isFinite)){
+      this.streak=0;this.samples.shift();return this.result(false);
+    }
+    this.lastGood=now;this.streak++;
+    this.samples.push({time:now,m:{...m}});
+    if(this.samples.length>CALIBRATION_FRAMES)this.samples.shift();
+    return this.result(true);
+  }
+  result(fresh){
+    const n=this.samples.length;
+    if(!n)return {progress:0,ready:false,baseline:null,samples:0,stability:0};
+    const baseline={};
+    for(const key of Object.keys(this.samples[0].m))baseline[key]=this.samples.reduce((sum,s)=>sum+s.m[key],0)/n;
+    let variation=0;
+    for(const key of ['hipX','hipY','shoulderY','feet','leftFoot','rightFoot','torso','lean']){
+      const values=this.samples.map(s=>s.m[key]);
+      const sd=Math.sqrt(values.reduce((sum,v)=>sum+(v-baseline[key])**2,0)/n);
+      const scale=key==='lean'?1:baseline.torso;
+      const maxSd=key==='lean'?.08:.025,maxRange=key==='lean'?.2:key==='torso'?.12:.08;
+      variation=Math.max(variation,sd/(scale*maxSd),(Math.max(...values)-Math.min(...values))/(scale*maxRange));
+    }
+    const stability=Math.min(1,1/Math.max(1,variation));
+    const ready=fresh&&n===CALIBRATION_FRAMES&&this.streak>=4&&variation<=1;
+    return {progress:ready?1:Math.min(.96,n/CALIBRATION_FRAMES*.96*stability),ready,baseline:ready?baseline:null,samples:n,stability};
   }
 }

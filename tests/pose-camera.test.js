@@ -92,3 +92,12 @@ test('inference median excludes warmup and resets after GPU recovery changes del
  result(20,'CPU');assert.equal(h.camera.diagnostics().inferenceMedianMs,null);
  result(20,'CPU');result(25,'CPU');assert.equal(h.camera.diagnostics().inferenceMedianMs,25);h.camera.stop();
 });
+
+test('duplicate and out-of-order inference results never count as new frames',async()=>{
+ const h=harness();await h.camera.start();h.time(100);h.result(100);h.result(100);h.result(90);
+ assert.equal(h.results.length,1);h.time(130);h.result(130);assert.equal(h.results.length,2);h.camera.stop();
+});
+test('camera and model preparation are distinct from recognition',async()=>{
+ const h=harness(),phases=[];h.camera.onPhase=phase=>phases.push(phase);await h.camera.start();
+ assert.deepEqual(phases,['camera','model','ready']);h.workers[0].onmessage({data:{type:'recovering'}});assert.equal(phases.at(-1),'recovering');h.camera.stop();
+});

@@ -1,16 +1,25 @@
+import {mountShopView} from './shop-view.js';
+import {requestAuth} from './auth-request.js';
 import { COURSE } from './course.js';
 import {createGuestAccount} from './guest-account.js';
 export const scarfColors=[['red','レッド','#d9514d'],['blue','ブルー','#4384be'],['yellow','イエロー','#e9b949'],['green','グリーン','#408974'],['purple','パープル','#8c69aa']];
 export function formatTime(ms){if(ms==null)return '—';const cs=Math.floor(ms/10);return `${String(Math.floor(cs/6000)).padStart(2,'0')}:${String(Math.floor(cs/100)%60).padStart(2,'0')}.${String(cs%100).padStart(2,'0')}`;}
-export function createAccount(onChange){
+/**
+ * @typedef {{coins:number,owned:string[],equipped:string,bestMs:number|null,courseId:string,guest?:boolean,durable?:boolean}} Profile
+ * @typedef {{runId:string,courseId:string,coins:number,timeMs:number}} RunReceipt 完走時に凍結する保存単位。時間はms。
+ */
+/**
+ * アカウント状態と保存キューの所有者。undefined=照会前、null=ゲスト、object=認証済み。
+ * ゲストの記録は自動移行しない。callは開始時の所有者と不変のJSON本文を保持する。
+ * @param {(profile:Profile)=>void} onChange 保存成功またはload後の確定値だけを通知
+ * @param {(event:string)=>void} onSound 保存成功後の購入音
+ */
+export function createAccount(onChange,onSound=()=>{}){
  let data=null,busy=false,identity=undefined,legacyAvailable=false,notice='';
  let storage;try{storage=globalThis.localStorage;}catch{}
  const guest=createGuestAccount(storage);
  let queue=Promise.resolve();
- async function authRequest(path,body){
-  const response=await fetch('/api/auth/'+path,{method:body?'POST':'GET',credentials:'same-origin',signal:AbortSignal.timeout(15000),headers:{...(identity?.id?{'x-bear-account':identity.id}:{}),...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
-  const result=await response.json().catch(()=>({error:'認証サービスに接続できません。'}));if(!response.ok)throw Error(result.error||'認証できませんでした。');return result;
- }
+ const authRequest=(path,body)=>requestAuth(path,body,identity);
  async function session(){const result=await authRequest('session');identity=result.user??null;legacyAvailable=!!result.legacyAvailable;}
  function changed(d){data=d;onChange(data);render();return data;}
  function serialized(fn){const operation=queue.then(fn);queue=operation.catch(()=>{});return operation;}
@@ -41,14 +50,23 @@ export function createAccount(onChange){
    });
    queue=operation.catch(()=>{});return operation;
  }
- document.getElementById('game').insertAdjacentHTML('beforeend',`<section class="overlay hidden" id="shop"><div class="panel shop-panel"><div class="eyebrow">THE SCARF CABIN</div><h2>雪山の小さなお店</h2><p>集めたコインで、クマに彩りを。</p><strong class="wallet" id="wallet"></strong><div class="scarves" id="scarves"></div><p id="shop-status" role="status"></p><button class="secondary" id="shop-close">雪山に戻る</button></div></section>`);
- document.getElementById('shop-close').onclick=()=>document.getElementById('shop').classList.add('hidden');
- function render(){if(!data)return;document.getElementById('wallet').textContent=`◉ ${data.coins} コイン`;document.getElementById('scarves').innerHTML=[['none','マフラーなし',null],...scarfColors].map(([id,name,color])=>{const owned=id==='none'||data.owned.includes(id),equipped=data.equipped===id;return `<button class="scarf-card ${equipped?'selected':''}" data-color="${id}" ${busy||equipped||!owned&&data.coins<25?'disabled':''}><span class="scarf-swatch" style="--scarf:${color||'#cad5da'}">${id==='none'?'—':'🧣'}</span><b>${name}</b><small>${equipped?'着用中':owned?'着用する':'25 コインで購入'}</small></button>`;}).join('');document.querySelectorAll('[data-color]').forEach(el=>el.onclick=async()=>{if(busy)return;busy=true;render();document.getElementById('shop-status').textContent='保存しています…';try{const color=el.dataset.color;await call(color==='none'||data.owned.includes(color)?'equip':'purchase',{color});document.getElementById('shop-status').textContent=data.guest?(data.durable?'このブラウザーに保存しました。':'このタブに記録しました。'):'アカウントに保存しました。';}catch(e){document.getElementById('shop-status').textContent=e.message;}finally{busy=false;render();}});}
+ const shop=mountShopView(document,scarfColors,async color=>{
+  if(busy)return;
+  busy=true;render();shop.status('保存しています…');
+  try{
+   const action=color==='none'||data.owned.includes(color)?'equip':'purchase';
+   await call(action,{color});
+   if(action==='purchase')try{onSound('purchase');}catch{}
+   shop.status(data.guest?(data.durable?'このブラウザーに保存しました。':'このタブに記録しました。'):'アカウントに保存しました。');
+  }catch(e){shop.status(e.message);}
+  finally{busy=false;render();}
+ });
+ function render(){shop.render(data,busy);}
  return {
   load:()=>call('profile'),save:run=>call('run',run),get data(){return data;},get identity(){return identity??null;},get legacyAvailable(){return legacyAvailable;},get notice(){return notice;},
-  authenticate:(mode,body)=>serialized(async()=>{if(!['login','register','recover'].includes(mode))throw Error('操作が不正です。');const result=await authRequest(mode,body);identity=result.user;notice='';await session().catch(()=>{legacyAvailable=false;});return result;}),
+  authenticate:(mode,body)=>serialized(async()=>{if(!['login','register','recover'].includes(mode))throw Error('操作が不正です。');const result=await authRequest(mode,body);notice='';try{await session();if(identity?.id!==result.user.id)result.sessionWarning='ログイン状態を確認できません。WorkerのHTTPS URLとCookieの許可を確認して、ログインし直してください。';}catch{identity=undefined;legacyAvailable=false;result.sessionWarning='ログイン状態の確認に失敗しました。接続を確認してログインし直してください。';}if(result.sessionWarning)notice=result.sessionWarning;return result;}),
   logout:()=>serialized(async()=>{await authRequest('logout',{});identity=null;legacyAvailable=false;notice='';}),
   importLegacy:()=>serialized(async()=>{await authRequest('import-legacy',{});await session();}),
-  open(){render();document.getElementById('shop').classList.remove('hidden');}
+  open(){render();shop.open();}
  };
 }

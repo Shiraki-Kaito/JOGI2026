@@ -1,13 +1,10 @@
-/* @noble/hashes: Copyright (c) 2022 Paul Miller. MIT License; see NOBLE-HASHES-LICENSE.txt. */
-
-// worker/account-api.js
-var COLORS = ["red", "blue", "yellow", "green", "purple"];
-var json = (body, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
+const COLORS = ["red", "blue", "yellow", "green", "purple"];
+const json = (body, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 function database(env) {
   if (!env.DB) throw Error("Database unavailable");
   return env.DB;
 }
-var COURSES = {
+const COURSES = {
   "cloud-ridge-1500": { bestColumn: "best_ridge_ms", minTime: 3e4, maxCoins: 180 },
   "alpine-2000": { bestColumn: "best_ms", minTime: 6e4, maxCoins: 230 },
   "cloud-ridge-1000": { bestColumn: "best_cloud_ms", minTime: 3e4, maxCoins: 120 }
@@ -22,7 +19,7 @@ async function handleAccount(request, env, identity = request.headers.get("oai-a
   if (!Object.hasOwn(COURSES, requestedCourse)) return json({ error: "Unknown course" }, 400);
   let responseCourse = requestedCourse;
   const user = identity;
-  if (!user) return json({ error: "\u30ED\u30B0\u30A4\u30F3\u3057\u76F4\u3057\u3066\u304B\u3089\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002" }, 401);
+  if (!user) return json({ error: "ログインし直してからお試しください。" }, 401);
   if (request.method !== "GET" && request.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (request.method === "POST" && request.headers.get("origin") !== url.origin) return json({ error: "Invalid origin" }, 403);
   try {
@@ -61,36 +58,35 @@ async function handleAccount(request, env, identity = request.headers.get("oai-a
       if (typeof courseId !== "string" || !Object.hasOwn(COURSES, courseId)) return json({ error: "Unknown course" }, 400);
       const course = COURSES[courseId];
       responseCourse = courseId;
-      if (typeof b.runId !== "string" || !/^[a-zA-Z0-9-]{20,64}$/.test(b.runId) || !Number.isInteger(b.coins) || b.coins < 0 || b.coins > course.maxCoins || !Number.isInteger(b.timeMs) || b.timeMs < course.minTime || b.timeMs > 36e5) return json({ error: "\u8A18\u9332\u306E\u5F62\u5F0F\u3092\u78BA\u8A8D\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002" }, 400);
+      if (typeof b.runId !== "string" || !/^[a-zA-Z0-9-]{20,64}$/.test(b.runId) || !Number.isInteger(b.coins) || b.coins < 0 || b.coins > course.maxCoins || !Number.isInteger(b.timeMs) || b.timeMs < course.minTime || b.timeMs > 36e5) return json({ error: "記録の形式を確認できませんでした。" }, 400);
       await db.batch([
         db.prepare("INSERT OR IGNORE INTO runs(user_id,run_id,coins,time_ms,course_id) VALUES(?,?,?,?,?)").bind(user, b.runId, b.coins, b.timeMs, courseId),
         db.prepare(`UPDATE profiles SET coins=coins+COALESCE((SELECT coins FROM runs WHERE user_id=? AND run_id=? AND claimed=0 AND course_id=?),0),${course.bestColumn}=CASE WHEN EXISTS(SELECT 1 FROM runs WHERE user_id=? AND run_id=? AND claimed=0 AND course_id=?) THEN MIN(COALESCE(${course.bestColumn},3600000),(SELECT time_ms FROM runs WHERE user_id=? AND run_id=?)) ELSE ${course.bestColumn} END WHERE user_id=?`).bind(user, b.runId, courseId, user, b.runId, courseId, user, b.runId, user),
         db.prepare("UPDATE runs SET claimed=1 WHERE user_id=? AND run_id=?").bind(user, b.runId)
       ]);
       const saved = await db.prepare("SELECT coins,time_ms,course_id FROM runs WHERE user_id=? AND run_id=?").bind(user, b.runId).first();
-      if (saved.course_id !== courseId || saved.coins !== b.coins || saved.time_ms !== b.timeMs) return json({ error: "\u540C\u3058\u6ED1\u8D70\u306E\u8A18\u9332\u304C\u7570\u306A\u308B\u5185\u5BB9\u3067\u3059\u3002\u3059\u3067\u306B\u4FDD\u5B58\u6E08\u307F\u306E\u8A18\u9332\u306F\u5909\u66F4\u3057\u3066\u3044\u307E\u305B\u3093\u3002" }, 409);
+      if (saved.course_id !== courseId || saved.coins !== b.coins || saved.time_ms !== b.timeMs) return json({ error: "同じ滑走の記録が異なる内容です。すでに保存済みの記録は変更していません。" }, 409);
     } else if (url.pathname === "/api/purchase") {
       if (Object.keys(b).some((k) => k !== "color")) return json({ error: "Invalid fields" }, 400);
-      if (!COLORS.includes(b.color)) return json({ error: "\u3053\u306E\u8272\u306F\u8CFC\u5165\u3067\u304D\u307E\u305B\u3093\u3002" }, 400);
+      if (!COLORS.includes(b.color)) return json({ error: "この色は購入できません。" }, 400);
       const r = await db.prepare(`UPDATE profiles SET coins=coins-25,owned=json_insert(owned,'$[#]',?),equipped=? WHERE user_id=? AND coins>=25 AND NOT EXISTS(SELECT 1 FROM json_each(owned) WHERE value=?)`).bind(b.color, b.color, user, b.color).run();
       if (!r.meta.changes) {
         const p = await profile(db, user, responseCourse);
-        if (!p.owned.includes(b.color)) return json({ error: "\u30B3\u30A4\u30F3\u304C\u8DB3\u308A\u307E\u305B\u3093\u300225\u30B3\u30A4\u30F3\u3067\u8CFC\u5165\u3067\u304D\u307E\u3059\u3002" }, 409);
+        if (!p.owned.includes(b.color)) return json({ error: "コインが足りません。25コインで購入できます。" }, 409);
       }
     } else if (url.pathname === "/api/equip") {
       if (Object.keys(b).some((k) => k !== "color")) return json({ error: "Invalid fields" }, 400);
       if (b.color !== "none" && !COLORS.includes(b.color)) return json({ error: "Invalid color" }, 400);
       const r = await db.prepare(`UPDATE profiles SET equipped=? WHERE user_id=? AND (?='none' OR EXISTS(SELECT 1 FROM json_each(owned) WHERE value=?))`).bind(b.color, user, b.color, b.color).run();
-      if (!r.meta.changes) return json({ error: "\u5148\u306B\u30DE\u30D5\u30E9\u30FC\u3092\u8CFC\u5165\u3057\u3066\u304F\u3060\u3055\u3044\u3002" }, 403);
+      if (!r.meta.changes) return json({ error: "先にマフラーを購入してください。" }, 403);
     } else return json({ error: "Not found" }, 404);
     return json(await profile(db, user, responseCourse));
   } catch (e) {
     console.error("Account storage failed", e);
-    return json({ error: "\u4FDD\u5B58\u5148\u306B\u63A5\u7D9A\u3067\u304D\u307E\u305B\u3093\u3002\u5C11\u3057\u5F85\u3063\u3066\u518D\u8A66\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002" }, 503);
+    return json({ error: "保存先に接続できません。少し待って再試行してください。" }, 503);
   }
 }
-
-// node_modules/@noble/hashes/utils.js
+/*! noble-hashes - MIT License (c) 2022 Paul Miller (paulmillr.com) */
 function isBytes(a) {
   return a instanceof Uint8Array || ArrayBuffer.isView(a) && a.constructor.name === "Uint8Array";
 }
@@ -148,7 +144,7 @@ function rotr(word, shift) {
 function rotl(word, shift) {
   return word << shift | word >>> 32 - shift >>> 0;
 }
-var isLE = /* @__PURE__ */ (() => new Uint8Array(new Uint32Array([287454020]).buffer)[0] === 68)();
+const isLE = /* @__PURE__ */ (() => new Uint8Array(new Uint32Array([287454020]).buffer)[0] === 68)();
 function byteSwap(word) {
   return word << 24 & 4278190080 | word << 8 & 16711680 | word >>> 8 & 65280 | word >>> 24 & 255;
 }
@@ -158,8 +154,8 @@ function byteSwap32(arr) {
   }
   return arr;
 }
-var swap32IfBE = isLE ? (u) => u : byteSwap32;
-var nextTick = async () => {
+const swap32IfBE = isLE ? (u) => u : byteSwap32;
+const nextTick = async () => {
 };
 async function asyncLoop(iters, tick, cb) {
   let ts = Date.now();
@@ -197,12 +193,10 @@ function createHasher(hashCons, info = {}) {
   Object.assign(hashC, info);
   return Object.freeze(hashC);
 }
-var oidNist = (suffix) => ({
+const oidNist = (suffix) => ({
   oid: Uint8Array.from([6, 9, 96, 134, 72, 1, 101, 3, 4, 2, suffix])
 });
-
-// node_modules/@noble/hashes/hmac.js
-var _HMAC = class {
+class _HMAC {
   oHash;
   iHash;
   blockLen;
@@ -268,11 +262,9 @@ var _HMAC = class {
     this.oHash.destroy();
     this.iHash.destroy();
   }
-};
-var hmac = (hash, key, message) => new _HMAC(hash, key).update(message).digest();
+}
+const hmac = (hash, key, message) => new _HMAC(hash, key).update(message).digest();
 hmac.create = (hash, key) => new _HMAC(hash, key);
-
-// node_modules/@noble/hashes/pbkdf2.js
 function pbkdf2Init(hash, _password, _salt, _opts) {
   ahash(hash);
   const opts = checkOpts({ dkLen: 32, asyncTick: 10 }, _opts);
@@ -316,15 +308,13 @@ function pbkdf2(hash, password, salt, opts) {
   }
   return pbkdf2Output(PRF, PRFSalt, DK, prfW, u);
 }
-
-// node_modules/@noble/hashes/_md.js
 function Chi(a, b, c) {
   return a & b ^ ~a & c;
 }
 function Maj(a, b, c) {
   return a & b ^ a & c ^ b & c;
 }
-var HashMD = class {
+class HashMD {
   blockLen;
   outputLen;
   padOffset;
@@ -418,8 +408,8 @@ var HashMD = class {
   clone() {
     return this._cloneInto();
   }
-};
-var SHA256_IV = /* @__PURE__ */ Uint32Array.from([
+}
+const SHA256_IV = /* @__PURE__ */ Uint32Array.from([
   1779033703,
   3144134277,
   1013904242,
@@ -429,9 +419,7 @@ var SHA256_IV = /* @__PURE__ */ Uint32Array.from([
   528734635,
   1541459225
 ]);
-
-// node_modules/@noble/hashes/sha2.js
-var SHA256_K = /* @__PURE__ */ Uint32Array.from([
+const SHA256_K = /* @__PURE__ */ Uint32Array.from([
   1116352408,
   1899447441,
   3049323471,
@@ -497,8 +485,8 @@ var SHA256_K = /* @__PURE__ */ Uint32Array.from([
   3204031479,
   3329325298
 ]);
-var SHA256_W = /* @__PURE__ */ new Uint32Array(64);
-var SHA2_32B = class extends HashMD {
+const SHA256_W = /* @__PURE__ */ new Uint32Array(64);
+class SHA2_32B extends HashMD {
   constructor(outputLen) {
     super(64, outputLen, 8, false);
   }
@@ -559,8 +547,8 @@ var SHA2_32B = class extends HashMD {
     this.set(0, 0, 0, 0, 0, 0, 0, 0);
     clean(this.buffer);
   }
-};
-var _SHA256 = class extends SHA2_32B {
+}
+class _SHA256 extends SHA2_32B {
   // We cannot use array here since array allows indexing by variable
   // which means optimizer/compiler cannot use registers.
   A = SHA256_IV[0] | 0;
@@ -574,13 +562,11 @@ var _SHA256 = class extends SHA2_32B {
   constructor() {
     super(32);
   }
-};
-var sha256 = /* @__PURE__ */ createHasher(
+}
+const sha256 = /* @__PURE__ */ createHasher(
   () => new _SHA256(),
   /* @__PURE__ */ oidNist(1)
 );
-
-// node_modules/@noble/hashes/scrypt.js
 function XorAndSalsa(prev, pi, input, ii, out, oi) {
   let y00 = prev[pi++] ^ input[ii++], y01 = prev[pi++] ^ input[ii++];
   let y02 = prev[pi++] ^ input[ii++], y03 = prev[pi++] ^ input[ii++];
@@ -729,20 +715,33 @@ async function scryptAsync(password, salt, opts) {
   swap32IfBE(B32);
   return scryptOutput(password, dkLen, B, V, tmp);
 }
-
-// worker/game-auth.js
-var encoder = new TextEncoder();
-var COOKIE = "__Host-bear-ski-session";
-var TTL = 30 * 86400;
-var reply = (body, status = 200, cookie2) => Response.json(body, { status, headers: { "cache-control": "no-store", ...cookie2 ? { "set-cookie": cookie2 } : {} } });
-var random = () => hex(crypto.getRandomValues(new Uint8Array(32)));
-var hex = (b) => Array.from(b, (v) => v.toString(16).padStart(2, "0")).join("");
-var unhex = (s) => Uint8Array.from(s.match(/../g), (v) => parseInt(v, 16));
-var digest = async (text) => hex(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(text))));
-var cookie = (token, age = TTL) => `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${age}`;
-var hashing = false;
+const NEW_PASSWORD_HINT = "8文字以上で、英字と数字を両方含めてください";
+const normalizeLogin = (login) => login.toLowerCase();
+function registrationIdError(login) {
+  return typeof login !== "string" || !login.length || /[^A-Za-z0-9]/.test(login) ? "ユーザーIDは半角英字・数字で入力してください。" : "";
+}
+function credentialError(mode, login, password) {
+  if (!["register", "login", "recover"].includes(mode)) return "操作が不正です。";
+  if (mode === "register") {
+    const error = registrationIdError(login);
+    if (error) return error;
+  } else if (typeof login !== "string" || !login.length || /[^A-Za-z0-9_]/.test(login)) return "登録したユーザーIDを入力してください。";
+  if (typeof password !== "string" || !password.length) return "パスワードを入力してください。";
+  const length = [...password].length;
+  if (length > 128) return "パスワードは128文字以内にしてください。";
+  if (mode !== "login" && (length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password))) return NEW_PASSWORD_HINT + "。";
+  return "";
+}
+const encoder = new TextEncoder(), COOKIE = "__Host-bear-ski-session", TTL = 30 * 86400;
+const reply = (body, status = 200, cookie2) => Response.json(body, { status, headers: { "cache-control": "no-store", ...cookie2 ? { "set-cookie": cookie2 } : {} } });
+const random = () => hex(crypto.getRandomValues(new Uint8Array(32)));
+const hex = (b) => Array.from(b, (v) => v.toString(16).padStart(2, "0")).join("");
+const unhex = (s) => Uint8Array.from(s.match(/../g), (v) => parseInt(v, 16));
+const digest = async (text) => hex(new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(text))));
+const cookie = (token, age = TTL) => `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${age}`;
+let hashing = false;
 async function passwordHash(password, salt) {
-  if (hashing) throw new AuthError("\u8A8D\u8A3C\u51E6\u7406\u304C\u6DF7\u307F\u5408\u3063\u3066\u3044\u307E\u3059\u3002\u5C11\u3057\u5F85\u3063\u3066\u518D\u8A66\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002", 503);
+  if (hashing) throw new AuthError("認証処理が混み合っています。少し待って再試行してください。", 503);
   hashing = true;
   try {
     return hex(await scryptAsync(encoder.encode(password), unhex(salt), { N: 16384, r: 8, p: 5, dkLen: 32, maxmem: 32 * 1024 * 1024 }));
@@ -750,7 +749,7 @@ async function passwordHash(password, salt) {
     hashing = false;
   }
 }
-var equal = (a, b) => {
+const equal = (a, b) => {
   if (a.length !== b.length) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
@@ -762,12 +761,12 @@ async function legacyAvailable(request, db) {
   const row = await db.prepare("SELECT user_id FROM profiles WHERE user_id=? AND NOT EXISTS(SELECT 1 FROM game_legacy_claims WHERE legacy_id=?)").bind(legacy, legacy).first();
   return !!row;
 }
-var AuthError = class extends Error {
+class AuthError extends Error {
   constructor(message, status = 400) {
     super(message);
     this.status = status;
   }
-};
+}
 function tokenOf(request) {
   const value = request.headers.get("cookie")?.split(";").map((s) => s.trim()).find((s) => s.startsWith(COOKIE + "="))?.slice(COOKIE.length + 1);
   return /^[0-9a-f]{64}$/.test(value ?? "") ? value : null;
@@ -780,13 +779,13 @@ async function gameUser(request, env) {
 async function limited(db, key, limit) {
   const now = Math.floor(Date.now() / 1e3), bucket = Math.floor(now / 600), id = await digest(key + ":" + bucket);
   const r = await db.prepare("INSERT INTO game_auth_limits(key,attempts,expires_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1 WHERE attempts<?").bind(id, now + 1200, limit).run();
-  if (!r.meta.changes) throw new AuthError("\u8A66\u884C\u56DE\u6570\u304C\u591A\u3044\u305F\u3081\u300110\u5206\u307B\u3069\u5F85\u3063\u3066\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002", 429);
+  if (!r.meta.changes) throw new AuthError("試行回数が多いため、10分ほど待ってお試しください。", 429);
   await db.prepare("DELETE FROM game_auth_limits WHERE expires_at<?").bind(now).run();
 }
 async function bodyOf(request) {
-  if (!request.headers.get("content-type")?.startsWith("application/json")) throw new AuthError("\u9001\u4FE1\u5F62\u5F0F\u304C\u4E0D\u6B63\u3067\u3059\u3002", 415);
+  if (!request.headers.get("content-type")?.startsWith("application/json")) throw new AuthError("送信形式が不正です。", 415);
   const reader = request.body?.getReader();
-  if (!reader) throw new AuthError("\u5165\u529B\u304C\u3042\u308A\u307E\u305B\u3093\u3002");
+  if (!reader) throw new AuthError("入力がありません。");
   let size = 0, raw = "";
   const decoder = new TextDecoder();
   while (true) {
@@ -795,7 +794,7 @@ async function bodyOf(request) {
     size += value.byteLength;
     if (size > 2048) {
       await reader.cancel();
-      throw new AuthError("\u5165\u529B\u304C\u9577\u3059\u304E\u307E\u3059\u3002", 413);
+      throw new AuthError("入力が長すぎます。", 413);
     }
     raw += decoder.decode(value, { stream: true });
   }
@@ -803,102 +802,118 @@ async function bodyOf(request) {
   try {
     data = JSON.parse(raw + decoder.decode());
   } catch {
-    throw new AuthError("\u5165\u529B\u5F62\u5F0F\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+    throw new AuthError("入力形式が不正です。");
   }
-  if (!data || typeof data !== "object" || Array.isArray(data)) throw new AuthError("\u5165\u529B\u5F62\u5F0F\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new AuthError("入力形式が不正です。");
   return data;
 }
-function credentials(b, reset = false) {
-  if (Object.keys(b).some((k) => !["login", "password", ...reset ? ["recovery"] : []].includes(k))) throw new AuthError("\u5165\u529B\u5F62\u5F0F\u304C\u4E0D\u6B63\u3067\u3059\u3002");
-  if (typeof b.login !== "string" || !/^[a-zA-Z0-9_]{3,24}$/.test(b.login)) throw new AuthError("\u30E6\u30FC\u30B6\u30FCID\u306F\u534A\u89D2\u82F1\u6570\u5B57\u30FB_\u30673\u301C24\u6587\u5B57\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-  if (typeof b.password !== "string" || [...b.password].length < 15 || [...b.password].length > 128) throw new AuthError("\u30D1\u30B9\u30EF\u30FC\u30C9\u306F15\u301C128\u6587\u5B57\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002");
-  return { login: b.login.toLowerCase(), password: b.password };
+function credentials(b, mode) {
+  if (Object.keys(b).some((k) => !["login", "password", ...mode === "recover" ? ["recovery"] : []].includes(k))) throw new AuthError("入力形式が不正です。");
+  const error = credentialError(mode, b.login, b.password);
+  if (error) throw new AuthError(error);
+  return { login: normalizeLogin(b.login), password: b.password };
 }
 async function session(db, user, expectedHash) {
   const now = Math.floor(Date.now() / 1e3), token = random();
   const results = await db.batch([db.prepare("DELETE FROM game_sessions WHERE expires_at<=?").bind(now), db.prepare("INSERT INTO game_sessions(token_hash,user_id,expires_at) SELECT ?,user_id,? FROM game_users WHERE user_id=? AND password_hash=?").bind(await digest(token), now + TTL, user, expectedHash)]);
-  if (!results[1].meta.changes) throw new AuthError("\u30D1\u30B9\u30EF\u30FC\u30C9\u304C\u5909\u66F4\u3055\u308C\u307E\u3057\u305F\u3002\u65B0\u3057\u3044\u30D1\u30B9\u30EF\u30FC\u30C9\u3067\u30ED\u30B0\u30A4\u30F3\u3057\u3066\u304F\u3060\u3055\u3044\u3002", 401);
+  if (!results[1].meta.changes) throw new AuthError("パスワードが変更されました。新しいパスワードでログインしてください。", 401);
   return cookie(token);
 }
 async function handleAuth(request, env) {
   const url = new URL(request.url), route = url.pathname.slice("/api/auth/".length), db = env.DB;
+  let stage = "binding";
   try {
-    if (!db) throw new AuthError("\u4FDD\u5B58\u5148\u306B\u63A5\u7D9A\u3067\u304D\u307E\u305B\u3093\u3002", 503);
+    if (!db) throw new AuthError("保存先に接続できません。", 503);
+    stage = "session-or-request";
     if (route === "session" && request.method === "GET") {
       const user = await gameUser(request, env);
       return reply({ user: user ? { id: user.user_id, login: user.login } : null, legacyAvailable: await legacyAvailable(request, db) });
     }
-    if (!["register", "login", "logout", "recover", "import-legacy"].includes(route)) return reply({ error: "Not found" }, 404);
+    if (!["register", "login", "logout", "recover", "import-legacy", "availability"].includes(route)) return reply({ error: "Not found" }, 404);
     if (request.method !== "POST") return reply({ error: "Method not allowed" }, 405);
-    if (request.headers.get("origin") !== url.origin) throw new AuthError("\u5225\u306E\u30B5\u30A4\u30C8\u304B\u3089\u306F\u64CD\u4F5C\u3067\u304D\u307E\u305B\u3093\u3002", 403);
+    if (request.headers.get("origin") !== url.origin) throw new AuthError("別のサイトからは操作できません。", 403);
     const b = await bodyOf(request);
+    if (route === "availability") {
+      if (Object.keys(b).length !== 1 || !Object.hasOwn(b, "login")) throw new AuthError("入力形式が不正です。");
+      const error = registrationIdError(b.login);
+      if (error) throw new AuthError(error);
+      stage = "availability-limit";
+      await limited(db, "availability-ip:" + (request.headers.get("cf-connecting-ip") || "unknown"), 120);
+      stage = "availability-lookup";
+      const row = await db.prepare("SELECT 1 AS present FROM game_users WHERE login=?").bind(normalizeLogin(b.login)).first();
+      return reply({ available: !row });
+    }
     if (route === "import-legacy") {
-      if (Object.keys(b).length) throw new AuthError("\u5165\u529B\u5F62\u5F0F\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+      if (Object.keys(b).length) throw new AuthError("入力形式が不正です。");
       const user = await gameUser(request, env), legacy = request.headers.get("oai-authenticated-user-id");
-      if (!user || !legacy) throw new AuthError("\u4EE5\u524D\u306EChatGPT\u30A2\u30AB\u30A6\u30F3\u30C8\u3068\u30B2\u30FC\u30E0\u306B\u30ED\u30B0\u30A4\u30F3\u3057\u3066\u304F\u3060\u3055\u3044\u3002", 401);
-      if (request.headers.get("x-bear-account") !== user.user_id) throw new AuthError("\u30A2\u30AB\u30A6\u30F3\u30C8\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002\u518D\u8AAD\u307F\u8FBC\u307F\u3057\u3066\u304F\u3060\u3055\u3044\u3002", 409);
-      if (!await legacyAvailable(request, db)) throw new AuthError("\u5F15\u304D\u7D99\u3052\u308B\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u3059\u3067\u306B\u5F15\u304D\u7D99\u3044\u3060\u5834\u5408\u3001\u4E8C\u91CD\u52A0\u7B97\u306F\u3057\u307E\u305B\u3093\u3002", 409);
+      if (!user || !legacy) throw new AuthError("以前のChatGPTアカウントとゲームにログインしてください。", 401);
+      if (request.headers.get("x-bear-account") !== user.user_id) throw new AuthError("アカウントが変わりました。再読み込みしてください。", 409);
+      if (!await legacyAvailable(request, db)) throw new AuthError("引き継げる記録がありません。すでに引き継いだ場合、二重加算はしません。", 409);
       await db.batch([
         db.prepare("INSERT OR IGNORE INTO game_legacy_claims(legacy_id,user_id,claimed) VALUES(?,?,0)").bind(legacy, user.user_id),
         db.prepare(`UPDATE profiles SET coins=coins+(SELECT coins FROM profiles WHERE user_id=?),owned=(SELECT json_group_array(value) FROM (SELECT DISTINCT value FROM json_each(profiles.owned) UNION SELECT value FROM json_each((SELECT owned FROM profiles WHERE user_id=?)))),equipped=CASE WHEN equipped='none' THEN (SELECT equipped FROM profiles WHERE user_id=?) ELSE equipped END,best_ms=CASE WHEN (SELECT best_ms FROM profiles WHERE user_id=?) IS NULL THEN best_ms ELSE MIN(COALESCE(best_ms,3600000),(SELECT best_ms FROM profiles WHERE user_id=?)) END,best_cloud_ms=CASE WHEN (SELECT best_cloud_ms FROM profiles WHERE user_id=?) IS NULL THEN best_cloud_ms ELSE MIN(COALESCE(best_cloud_ms,3600000),(SELECT best_cloud_ms FROM profiles WHERE user_id=?)) END,best_ridge_ms=CASE WHEN (SELECT best_ridge_ms FROM profiles WHERE user_id=?) IS NULL THEN best_ridge_ms ELSE MIN(COALESCE(best_ridge_ms,3600000),(SELECT best_ridge_ms FROM profiles WHERE user_id=?)) END WHERE user_id=? AND EXISTS(SELECT 1 FROM game_legacy_claims WHERE legacy_id=? AND user_id=? AND claimed=0)`).bind(legacy, legacy, legacy, legacy, legacy, legacy, legacy, legacy, legacy, user.user_id, legacy, user.user_id),
         db.prepare("UPDATE game_legacy_claims SET claimed=1 WHERE legacy_id=? AND user_id=?").bind(legacy, user.user_id)
       ]);
       const claim = await db.prepare("SELECT user_id FROM game_legacy_claims WHERE legacy_id=?").bind(legacy).first();
-      if (claim?.user_id !== user.user_id) throw new AuthError("\u3053\u306E\u8A18\u9332\u306F\u5225\u306E\u30B2\u30FC\u30E0\u30A2\u30AB\u30A6\u30F3\u30C8\u306B\u5F15\u304D\u7D99\u304E\u6E08\u307F\u3067\u3059\u3002", 409);
+      if (claim?.user_id !== user.user_id) throw new AuthError("この記録は別のゲームアカウントに引き継ぎ済みです。", 409);
       return reply({ imported: true });
     }
     if (route === "logout") {
-      if (Object.keys(b).length) throw new AuthError("\u5165\u529B\u5F62\u5F0F\u304C\u4E0D\u6B63\u3067\u3059\u3002");
+      if (Object.keys(b).length) throw new AuthError("入力形式が不正です。");
       const token = tokenOf(request);
       if (token) await db.prepare("DELETE FROM game_sessions WHERE token_hash=?").bind(await digest(token)).run();
       return reply({ user: null }, 200, cookie("", 0));
     }
-    const { login, password } = credentials(b, route === "recover");
+    const { login, password } = credentials(b, route);
     const ip = request.headers.get("cf-connecting-ip") || "unknown";
+    stage = "rate-limit";
     await limited(db, "ip:" + ip, ip === "unknown" ? 100 : 60);
     await limited(db, "login:" + login, 10);
+    stage = "user-lookup";
     let existing = await db.prepare("SELECT * FROM game_users WHERE login=?").bind(login).first();
     if (route === "register") {
-      if (existing) throw new AuthError("\u3053\u306E\u30E6\u30FC\u30B6\u30FCID\u306F\u4F7F\u7528\u3055\u308C\u3066\u3044\u307E\u3059\u3002\u30ED\u30B0\u30A4\u30F3\u3059\u308B\u304B\u3001\u5225\u306EID\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044\u3002", 409);
+      if (existing) throw new AuthError("このユーザーIDは使用されています。ログインするか、別のIDを選んでください。", 409);
+      stage = "password-hash";
       const salt = random(), hash2 = await passwordHash(password, salt), recovery = random(), id = "game:" + crypto.randomUUID();
+      stage = "user-create";
       try {
         await db.batch([db.prepare("INSERT INTO game_users(user_id,login,password_hash,salt,recovery_hash) VALUES(?,?,?,?,?)").bind(id, login, hash2, salt, await digest(recovery)), db.prepare("INSERT INTO profiles(user_id) VALUES(?)").bind(id)]);
       } catch {
-        if (await db.prepare("SELECT user_id FROM game_users WHERE login=?").bind(login).first()) throw new AuthError("\u3053\u306E\u30E6\u30FC\u30B6\u30FCID\u306F\u4F7F\u7528\u3055\u308C\u3066\u3044\u307E\u3059\u3002", 409);
-        throw new AuthError("\u767B\u9332\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u5C11\u3057\u5F85\u3063\u3066\u518D\u8A66\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002", 503);
+        if (await db.prepare("SELECT user_id FROM game_users WHERE login=?").bind(login).first()) throw new AuthError("このユーザーIDは使用されています。", 409);
+        throw new AuthError("登録できませんでした。少し待って再試行してください。", 503);
       }
       return reply({ user: { id, login }, recovery }, 201, await session(db, id, hash2));
     }
     if (route === "recover") {
       const code = typeof b.recovery === "string" ? b.recovery.trim() : "";
-      if (!/^[0-9a-f]{64}$/.test(code) || !existing || !equal(await digest(code), existing.recovery_hash)) throw new AuthError("\u30E6\u30FC\u30B6\u30FCID\u307E\u305F\u306F\u5FA9\u65E7\u30B3\u30FC\u30C9\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002", 401);
+      if (!/^[0-9a-f]{64}$/.test(code) || !existing || !equal(await digest(code), existing.recovery_hash)) throw new AuthError("ユーザーIDまたは復旧コードを確認してください。", 401);
       const salt = random(), hash2 = await passwordHash(password, salt), recovery = random();
       const updated = await db.prepare("UPDATE game_users SET password_hash=?,salt=?,recovery_hash=? WHERE user_id=? AND recovery_hash=?").bind(hash2, salt, await digest(recovery), existing.user_id, existing.recovery_hash).run();
-      if (!updated.meta.changes) throw new AuthError("\u3053\u306E\u5FA9\u65E7\u30B3\u30FC\u30C9\u306F\u4F7F\u7528\u6E08\u307F\u3067\u3059\u3002", 401);
+      if (!updated.meta.changes) throw new AuthError("この復旧コードは使用済みです。", 401);
       await db.prepare("DELETE FROM game_sessions WHERE user_id=?").bind(existing.user_id).run();
       return reply({ user: { id: existing.user_id, login }, recovery }, 200, await session(db, existing.user_id, hash2));
     }
+    stage = "password-hash";
     const hash = await passwordHash(password, existing?.salt ?? "0".repeat(64));
-    if (!existing || !equal(hash, existing.password_hash)) throw new AuthError("\u30E6\u30FC\u30B6\u30FCID\u307E\u305F\u306F\u30D1\u30B9\u30EF\u30FC\u30C9\u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002", 401);
+    if (!existing || !equal(hash, existing.password_hash)) throw new AuthError("ユーザーIDまたはパスワードを確認してください。", 401);
     return reply({ user: { id: existing.user_id, login } }, 200, await session(db, existing.user_id, existing.password_hash));
   } catch (error) {
-    return reply({ error: error instanceof AuthError ? error.message : "\u8A8D\u8A3C\u30B5\u30FC\u30D3\u30B9\u306B\u63A5\u7D9A\u3067\u304D\u307E\u305B\u3093\u3002\u5C11\u3057\u5F85\u3063\u3066\u518D\u8A66\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002" }, error instanceof AuthError ? error.status : 503);
+    if (!(error instanceof AuthError) || error.status >= 500) console.error("Bear Ski auth failure", { stage });
+    return reply({ error: error instanceof AuthError ? error.message : "認証サービスに接続できません。少し待って再試行してください。" }, error instanceof AuthError ? error.status : 503);
   }
 }
-
-// worker/index.js
-var policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; worker-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'self'";
-var index_default = { async fetch(request, env) {
+const policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; worker-src 'self'; img-src 'self' data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'self'";
+const index = { async fetch(request, env) {
   const path = new URL(request.url).pathname;
   let response;
   try {
     if (path.startsWith("/api/auth/")) response = await handleAuth(request, env);
     else if (path.startsWith("/api/")) {
       const user = await gameUser(request, env);
-      response = user && request.headers.get("x-bear-account") !== user.user_id ? Response.json({ error: "\u5225\u306E\u30BF\u30D6\u3067\u30A2\u30AB\u30A6\u30F3\u30C8\u304C\u5909\u308F\u308A\u307E\u3057\u305F\u3002\u518D\u8AAD\u307F\u8FBC\u307F\u3057\u3066\u304F\u3060\u3055\u3044\u3002" }, { status: 409, headers: { "cache-control": "no-store" } }) : await handleAccount(request, env, user?.user_id ?? null);
+      response = user && request.headers.get("x-bear-account") !== user.user_id ? Response.json({ error: "別のタブでアカウントが変わりました。再読み込みしてください。" }, { status: 409, headers: { "cache-control": "no-store" } }) : await handleAccount(request, env, user?.user_id ?? null);
     } else response = await env.ASSETS.fetch(request);
   } catch {
-    response = Response.json({ error: "\u4FDD\u5B58\u5148\u306B\u63A5\u7D9A\u3067\u304D\u307E\u305B\u3093\u3002\u5C11\u3057\u5F85\u3063\u3066\u518D\u8A66\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002" }, { status: 503, headers: { "cache-control": "no-store" } });
+    response = Response.json({ error: "保存先に接続できません。少し待って再試行してください。" }, { status: 503, headers: { "cache-control": "no-store" } });
   }
   const headers = new Headers(response.headers);
   headers.set("Content-Security-Policy", policy);
@@ -908,10 +923,5 @@ var index_default = { async fetch(request, env) {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 } };
 export {
-  index_default as default
+  index as default
 };
-/*! Bundled license information:
-
-@noble/hashes/utils.js:
-  (*! noble-hashes - MIT License (c) 2022 Paul Miller (paulmillr.com) *)
-*/

@@ -1,22 +1,30 @@
+/**
+ * カメラ/Workerの寿命とフレーム転送を所有する境界。
+ * onResult(result,timestamp)のtimestampはメインスレッドの画像取得開始performance.now()（ms）。
+ * Workerの時計とは差を取らない。inferenceMsはWorker内の所要時間だけ。
+ * video.mediaTimeはカメラFPS計測専用。ゲームのelapsed（秒）やDate.now()と混同しない。
+ * 有効な新着結果だけを転送するが、人物なしの結果も通知し、操作側で未検出を扱う。
+ */
 // Camera frames stay in this browser. At most one bitmap is in flight.
 export class PoseCamera {
-  constructor({video,onResult,onError,workerFactory=()=>new Worker('/pose-worker.js?v=performance-context-2'),capture=source=>createImageBitmap(source,{resizeWidth:480,resizeHeight:Math.max(1,Math.round(480*(source.videoHeight||480)/(source.videoWidth||640))),resizeQuality:'low'}),media=()=>navigator.mediaDevices,clock=()=>performance.now()}){
-    Object.assign(this,{video,onResult,onError,workerFactory,capture,media,clock});
+  constructor({video,onResult,onError,onPhase=()=>{},workerFactory=()=>new Worker('/pose-worker.js?v=performance-context-2'),capture=source=>createImageBitmap(source,{resizeWidth:480,resizeHeight:Math.max(1,Math.round(480*(source.videoHeight||480)/(source.videoWidth||640))),resizeQuality:'low'}),media=()=>navigator.mediaDevices,clock=()=>performance.now()}){
+    Object.assign(this,{video,onResult,onError,onPhase,workerFactory,capture,media,clock});
     this.generation=0;this.ready=false;this.busy=false;this.stream=null;this.worker=null;this.preferredDelegate='GPU';
     this.resetTimings();
   }
-  resetTimings(){this.timings={accepted:0,dropped:0,captureMs:0,inferenceMs:0,inferenceMedianMs:null,inferenceSamples:0,resultAgeMs:0,appliedAgeMs:0,visibleAgeMs:0,renderMs:0,cameraFps:0,poseFps:0,delegate:null,recovering:false,lastError:null};this.poseIntervals=[];this.videoIntervals=[];this.inferenceSamples=[];this.warmupRemaining=2;this.lastResultTimestamp=this.lastVideoTimestamp=null;}
+  resetTimings(){this.timings={cameraSetupMs:null,modelSetupMs:null,accepted:0,dropped:0,captureMs:0,inferenceMs:0,inferenceMedianMs:null,inferenceSamples:0,resultAgeMs:0,appliedAgeMs:0,visibleAgeMs:0,renderMs:0,cameraFps:0,poseFps:0,delegate:null,recovering:false,lastError:null};this.poseIntervals=[];this.videoIntervals=[];this.inferenceSamples=[];this.warmupRemaining=2;this.lastResultTimestamp=this.lastVideoTimestamp=null;}
   async start(){
-    this.stop();this.resetTimings();const generation=this.generation;
+    this.stop();this.resetTimings();const generation=this.generation,startedAt=this.clock();let modelStartedAt=null;
     try{
       if(!this.media()?.getUserMedia)throw Error('カメラに対応したブラウザーで開いてください。');
+      this.onPhase('camera');
       const stream=await this.media().getUserMedia({video:{width:640,height:480,facingMode:'user',frameRate:{ideal:30}},audio:false});
       if(generation!==this.generation){stream.getTracks().forEach(t=>t.stop());return false;}
       this.stream=stream;
       for(const track of stream.getVideoTracks())track.onended=()=>this.fail(Error('カメラとの接続が切れました。'),generation);
       this.video.srcObject=stream;await this.video.play();
       if(generation!==this.generation)return false;
-      this.worker=this.workerFactory();
+      this.timings.cameraSetupMs=this.clock()-startedAt;modelStartedAt=this.clock();this.onPhase('model');this.worker=this.workerFactory();
       await new Promise((resolve,reject)=>{
         this.rejectStart=reject;
         this.timer=setTimeout(()=>this.fail(Error('姿勢認識の準備がタイムアウトしました。'),generation),30000);
@@ -24,9 +32,9 @@ export class PoseCamera {
         this.worker.onmessageerror=this.worker.onerror;
         this.worker.onmessage=({data})=>{
           if(generation!==this.generation)return;
-          if(data.type==='ready'){clearTimeout(this.timer);this.rejectStart=null;this.ready=true;this.timings.delegate=data.delegate??null;this.lastFrameAt=this.clock();resolve();}
+          if(data.type==='ready'){this.timings.modelSetupMs=this.clock()-modelStartedAt;this.onPhase('ready');clearTimeout(this.timer);this.rejectStart=null;this.ready=true;this.timings.delegate=data.delegate??null;this.lastFrameAt=this.clock();resolve();}
           else if(data.type==='recovering'){
-            this.timings.recovering=true;clearTimeout(this.timer);
+            this.onPhase('recovering');this.timings.recovering=true;clearTimeout(this.timer);
             this.timer=setTimeout(()=>this.fail(Error('姿勢認識の復旧がタイムアウトしました。'),generation),30000);
           }
           else if(data.type==='result'){
@@ -40,7 +48,7 @@ export class PoseCamera {
               if(this.warmupRemaining>0)this.warmupRemaining--;
               else{this.inferenceSamples.push(data.inferenceMs);if(this.inferenceSamples.length>30)this.inferenceSamples.shift();const sorted=[...this.inferenceSamples].sort((a,b)=>a-b);this.timings.inferenceMedianMs=sorted[Math.floor(sorted.length/2)];this.timings.inferenceSamples=sorted.length;}
             }
-            if(age<=250&&!data.discard){
+            if(age>=0&&age<=250&&!data.discard&&(this.lastResultTimestamp===null||data.timestamp>this.lastResultTimestamp)){
               if(this.lastResultTimestamp!==null)this.addInterval(this.poseIntervals,data.timestamp-this.lastResultTimestamp,'poseFps');
               this.lastResultTimestamp=data.timestamp;
               this.timings.accepted++;this.appliedTimestamp=data.timestamp;this.onResult(data.result,data.timestamp);

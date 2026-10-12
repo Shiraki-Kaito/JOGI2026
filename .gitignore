@@ -5,3 +5,9 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Local-only database, certificates, npm cache and verification scratch files
+.wrangler/
+.local-dev/
+.dev.vars
+.dev.vars.*

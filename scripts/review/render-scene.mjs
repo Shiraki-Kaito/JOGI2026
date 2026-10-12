@@ -10,8 +10,8 @@ const {createCanvas,loadImage}=require('@napi-rs/canvas');
 const width=1440,height=810,canvas=createCanvas(width,height);
 class Renderer extends SoftwareRenderer{constructor(){super(canvas);}}
 const ctx=vm.createContext({THREE:{...THREE,WebGLRenderer:Renderer},performance,SoftwareRenderer,devicePixelRatio:1,innerWidth:width,innerHeight:height,$:()=>canvas,document:{body:{classList:{toggle(){}}}}});
-for(const file of ['course.js','ramps.js','alpine-scenery.js','ski-world.js']){
- const source=readFileSync(new URL('../../web/'+file,import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/export /g,'');vm.runInContext(source,ctx);
+for(const file of ['course.js','course-surface.js','ski-atmosphere.js','collectibles.js','title-scene.js','ramps.js','alpine-scenery.js','finish-line.js','ski-world.js']){
+ const source=readFileSync(new URL('../../web/'+file,import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/export /g,'');vm.runInContext(source,ctx);
 }
 vm.runInContext('var world=createSkiWorld();',ctx);
 const asset=new URL('../../web/public/assets/cloud-panorama.webp',import.meta.url);if(existsSync(asset)){ctx.panoramaImage=await loadImage(readFileSync(asset));vm.runInContext('world.setPanorama(panoramaImage)',ctx);}
