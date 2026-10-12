@@ -10,12 +10,12 @@ async function profile(db,user,courseId){
  const p=await db.prepare('SELECT coins,owned,equipped,best_ms,best_cloud_ms,best_ridge_ms FROM profiles WHERE user_id=?').bind(user).first();
  return {coins:p.coins,owned:JSON.parse(p.owned),equipped:p.equipped,bestMs:p[COURSES[courseId].bestColumn],courseId,legacyBestMs:p.best_ms};
 }
-export async function handleAccount(request,env){
+export async function handleAccount(request,env,identity=request.headers.get('oai-authenticated-user-id')){
  const url=new URL(request.url);
  const requestedCourse=url.searchParams.get('courseId')||'alpine-2000';
  if(!Object.hasOwn(COURSES,requestedCourse))return json({error:'Unknown course'},400);
  let responseCourse=requestedCourse;
- const user=request.headers.get('oai-authenticated-user-id');
+ const user=identity;
  if(!user)return json({error:'ログインし直してからお試しください。'},401);
  if(request.method!=='GET'&&request.method!=='POST')return json({error:'Method not allowed'},405);
  if(request.method==='POST'&&request.headers.get('origin')!==url.origin)return json({error:'Invalid origin'},403);

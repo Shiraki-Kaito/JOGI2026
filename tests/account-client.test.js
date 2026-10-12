@@ -2,9 +2,10 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
+import {createGuestAccount} from '../web/guest-account.js';
 function client(fetch){
  const element={insertAdjacentHTML(){},classList:{add(){},remove(){}},textContent:'',innerHTML:''};
- const context=vm.createContext({COURSE:{id:'cloud-ridge-1000'},fetch,AbortSignal,setTimeout:fn=>fn(),document:{getElementById:()=>element,querySelectorAll:()=>[]}});
+ const context=vm.createContext({COURSE:{id:'cloud-ridge-1000'},createGuestAccount,structuredClone,fetch:(path,options)=>path==='/api/auth/session'?Promise.resolve(Response.json({user:{id:'test',login:'test'}})):fetch(path,options),AbortSignal,setTimeout:fn=>fn(),document:{getElementById:()=>element,querySelectorAll:()=>[]}});
  vm.runInContext(readFileSync(new URL('../web/account.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);
  return vm.runInContext('createAccount(()=>{})',context);
 }
@@ -21,5 +22,18 @@ test('non-retryable errors stop immediately and later operations still work',asy
 test('account requests are serialized so old responses cannot overwrite newer state',async()=>{
  let release;const pending=new Promise(r=>release=r),calls=[];
  const account=client(async path=>{calls.push(path);if(calls.length===1)await pending;return Response.json({...profile,coins:calls.length});});
- const first=account.load(),second=account.save({runId:'two'});await Promise.resolve();assert.equal(calls.length,1);release();await Promise.all([first,second]);assert.equal(account.data.coins,2);
+ const first=account.load(),second=account.save({runId:'two'});await new Promise(setImmediate);assert.equal(calls.length,1);release();await Promise.all([first,second]);assert.equal(account.data.coins,2);
+});
+test('guest wallet stays local and separate across registration, login and logout',async()=>{
+ const element={insertAdjacentHTML(){},classList:{add(){},remove(){}},textContent:'',innerHTML:''},stored=new Map();let user=null,uploads=0;
+ const context=vm.createContext({COURSE:{id:'cloud-ridge-1500'},createGuestAccount,structuredClone,AbortSignal,setTimeout:fn=>fn(),localStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v)},document:{getElementById:()=>element,querySelectorAll:()=>[]},fetch:async(path,options)=>{
+  if(path==='/api/auth/session')return Response.json({user});
+  if(path==='/api/auth/register'){user={id:'game:new',login:'new_user'};return Response.json({user,recovery:'code'});}
+  if(path==='/api/auth/logout'){user=null;return Response.json({user:null});}
+  if(options.method==='POST')uploads++;return Response.json({...profile,coins:0});
+ }});
+ vm.runInContext(readFileSync(new URL('../web/account.js',import.meta.url),'utf8').replace(/^import .*;\n/gm,'').replace(/export /g,''),context);const a=vm.runInContext('createAccount(()=>{})',context);
+ assert.equal((await a.load()).guest,true);await a.save({runId:'guest-run-000000000000000',coins:30,timeMs:59000,courseId:'cloud-ridge-1500'});assert.equal(a.data.coins,30);assert.equal(uploads,0);
+ await a.authenticate('register',{login:'new_user',password:'a long unique password'});await a.load();assert.equal(a.data.coins,0);assert.equal(a.identity.login,'new_user');
+ await a.logout();await a.load();assert.equal(a.identity,null);assert.equal(a.data.coins,30);assert.equal(uploads,0);
 });

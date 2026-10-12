@@ -12,6 +12,7 @@ $('game').innerHTML=`
  <button class="primary" id="camera-start">${icon('camera')} からだで遊ぶ</button>
  <nav class="start-links" aria-label="ゲームメニュー"><button id="keyboard-start">キーボード</button><button id="shop-open" disabled>マフラー</button><button id="help-open">遊び方</button></nav>
  <div class="account-summary"><span id="account-status" role="status">読み込み中…</span><button id="account-retry" class="hidden">再試行</button></div>
+ <button id="auth-open" class="text-button">ログイン・新規登録</button><p class="guest-hint" id="guest-hint">登録なしで、そのまま遊べます。</p>
 </section>
 <footer class="start-bottom" id="start-bottom">1,500 m / 約1分</footer>
 <section class="hud hidden" id="hud">

@@ -4,6 +4,7 @@ import { RAMPS, rampHeight, rampSlope, crossedRamp, nextRamp } from './ramps.js'
 import { COURSE } from './course.js';
 import { JumpDetector } from './body-control.js';
 import { createAccount, scarfColors, formatTime } from './account.js';
+import {mountAuthUI} from './auth-ui.js';
 import { AutoCalibration, isStanding } from './auto-calibration.js';
 import * as THREE from './three.module.js';
 import { createSkiWorld, curve } from './ski-world.js';
@@ -12,12 +13,15 @@ import { PoseCamera } from './pose-camera.js';
 import { poseMeasures, fullBody, upperBody, drawSkeleton, poseControls } from './pose-input.js';
 mountGameUI();
 const world=createSkiWorld();const {objects,bags,trees,treeCount}=world;
-const account=createAccount(p=>{world.setScarf(p.equipped,scarfColors.find(c=>c[0]===p.equipped)?.[2]);$('account-status').textContent=`◉ ${p.coins} · BEST ${formatTime(p.bestMs)}`;$('best-time').textContent=formatTime(p.bestMs);$('final-best').textContent=formatTime(p.bestMs);$('shop-open').disabled=false;});
+let authUI=null;
+const account=createAccount(p=>{world.setScarf(p.equipped,scarfColors.find(c=>c[0]===p.equipped)?.[2]);$('account-status').textContent=`${account.identity?.login??'ゲスト'} · ◉ ${p.coins} · BEST ${formatTime(p.bestMs)}`;$('guest-hint').textContent=account.identity?'記録はアカウントに保存されます。':`${p.durable===false?'このタブを閉じるとゲストの記録は消えます。':'ゲストの記録は、このブラウザーに保存します。'}${account.notice??''}`;$('best-time').textContent=formatTime(p.bestMs);$('final-best').textContent=formatTime(p.bestMs);$('shop-open').disabled=false;authUI?.refresh();});
+authUI=mountAuthUI(account,()=>loadAccount());
 async function loadAccount(){['camera-start','keyboard-start'].forEach(id=>$(id).disabled=true);show('account-retry',false);try{await account.load();['camera-start','keyboard-start'].forEach(id=>$(id).disabled=false);}catch(e){$('account-status').textContent=e.message;show('account-retry',true);}}
 $('shop-open').onclick=()=>account.open();$('help-open').onclick=()=>show('help',true);$('help-close').onclick=()=>show('help',false);$('account-retry').onclick=loadAccount;
-async function saveFinish(){if(!finishRecord)return;['again','result-home','save-retry'].forEach(id=>$(id).disabled=true);$('save-status').textContent='記録とコインを保存中…';show('save-retry',false);try{await account.save(finishRecord);$('save-status').textContent='アカウントに保存しました';['again','result-home'].forEach(id=>$(id).disabled=false);}catch(e){$('save-status').textContent=e.message+' この画面を閉じずに再試行してください。';show('save-retry',true);}finally{$('save-retry').disabled=false;}}
+async function saveFinish(){if(!finishRecord)return;['again','result-home','save-retry'].forEach(id=>$(id).disabled=true);$('save-status').textContent='記録とコインを保存中…';show('save-retry',false);try{if(runAccountId!==(account.identity?.id??'guest'))throw Error('アカウントが変わったため、この滑走を別のアカウントには保存できません。');const p=await account.save(finishRecord);$('save-status').textContent=p.guest?(p.durable?'このブラウザーに保存しました':'このタブに記録しました'):'アカウントに保存しました';['again','result-home'].forEach(id=>$(id).disabled=false);}catch(e){$('save-status').textContent=e.message+' この画面を閉じずに再試行してください。';show('save-retry',true);}finally{$('save-retry').disabled=false;}}
 $('save-retry').onclick=saveFinish;
 const COURSE_LENGTH=COURSE.length;let runId=crypto.randomUUID(),finishRecord=null;
+let runAccountId=account.identity?.id??'guest';
 let distance=0,elapsed=0,score=0,crystals=0,jumps=0,speed=0,playerX=0,vertical=0,vy=0,steer=0,tuck=0,hitTimer=0,mode='keyboard',state='title',countTime=0,resumeAfterCalibration=false;
 let lastManualJump=-Infinity,rampLaunchTime=-Infinity,rampBoosted=false;
 const keys=new Set();let muted=true,audioCtx=null;function tone(freq=650,len=.12){if(muted)return;try{audioCtx??=new AudioContext();const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sine';o.frequency.value=freq;g.gain.setValueAtTime(.055,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+len);o.connect(g).connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+len);}catch{}}
@@ -29,7 +33,7 @@ if(elapsed-rampLaunchTime<=.3&&!rampBoosted){vy=Math.max(vy,17);rampBoosted=true
 const ground=rampHeight(distance);if(vertical>ground+.05)return false;
 lastManualJump=elapsed;vy=COURSE.jumpVelocity+speed*rampSlope(distance);vertical=ground+.01;jumps++;tone(330,.1);return true;
 }
-function resetRun(){lastManualJump=rampLaunchTime=-Infinity;rampBoosted=false;runId=crypto.randomUUID();finishRecord=null;elapsed=distance=score=crystals=jumps=playerX=vertical=vy=steer=tuck=hitTimer=0;speed=COURSE.cruiseSpeed;bags.forEach(b=>{b.userData.collected=false;b.visible=true;});objects.forEach((o,i)=>{o.userData.along=25+i*COURSE.objectSpacing;o.userData.offset=Math.sin(i*.8)*9;o.userData.collected=false;o.visible=true;});trees.forEach((t,i)=>t.userData.along=i*360/treeCount);}
+function resetRun(){runAccountId=account.identity?.id??'guest';lastManualJump=rampLaunchTime=-Infinity;rampBoosted=false;runId=crypto.randomUUID();finishRecord=null;elapsed=distance=score=crystals=jumps=playerX=vertical=vy=steer=tuck=hitTimer=0;speed=COURSE.cruiseSpeed;bags.forEach(b=>{b.userData.collected=false;b.visible=true;});objects.forEach((o,i)=>{o.userData.along=25+i*COURSE.objectSpacing;o.userData.offset=Math.sin(i*.8)*9;o.userData.collected=false;o.visible=true;});trees.forEach((t,i)=>t.userData.along=i*360/treeCount);}
 function begin(fresh=true){$('scene').focus({preventScroll:true});if(fresh)resetRun();show('start',false);show('start-bottom',false);show('setup',false);show('result',false);show('paused',false);show('topbar',false);show('hud',true);show('pause',true);show('touch',mode==='keyboard');show('mini',mode==='camera');state='countdown';countTime=3;show('countdown',true);$('countdown').textContent='3';}
 function pause(reason=''){if(state!=='playing')return;state='paused';keys.clear();show('paused',true);$('pause-title').textContent=reason?'全身を映してください':'ひと休み。';$('pause-copy').textContent=reason||'準備ができたら、続きを滑ろう。';show('recalibrate',mode==='camera');}
 function finish(){stopCamera();finishRecord={runId,courseId:COURSE.id,coins:crystals,timeMs:Math.round(elapsed*1000)};$('final-time').textContent=formatTime(finishRecord.timeMs);$('new-best').textContent=account.data?.bestMs==null||finishRecord.timeMs<account.data.bestMs?'NEW BEST!':'';saveFinish();state='result';show('result',true);show('pause',false);show('touch',false);show('mini',false);$('final-score').textContent=Math.floor(score).toLocaleString();$('final-distance').textContent=Math.floor(distance).toLocaleString();$('final-crystals').textContent=crystals;$('final-jumps').textContent=jumps;tone(880,.5);}
