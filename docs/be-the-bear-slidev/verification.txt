@@ -1,0 +1,46 @@
+【引き継いだゲーム側の検証記録：2026-10-15】
+今回の資料改善でゲーム側のテストを再実行した記録ではありません。
+
+✔ only distinct valid frames advance the gauge and a stable window completes (2.896479ms)
+✔ wobble adjusts progress without discarding every frame; stable new data replaces it (2.376109ms)
+✔ body loss pauses or reduces progress; elapsed time alone cannot complete (0.522524ms)
+✔ low skeleton FPS can complete from enough fresh stable samples (3.289632ms)
+✔ invalid measures never become a baseline (0.41205ms)
+✔ confidence, framing, facing and standing give one specific instruction (0.6144ms)
+✔ low pose rates retain motion and rearm despite ankle baseline drift (1.892513ms)
+✔ a real long dropout still clears velocity and cannot jump on reappearance (0.215549ms)
+✔ small jump triggers once, landing rearms the next jump (0.156522ms)
+✔ noise and rising from a crouch without feet lifting do not jump (0.225133ms)
+✔ jump from crouch fires only after the body passes neutral standing height (1.003496ms)
+✔ reset starts fresh after automatic recalibration (0.167608ms)
+✔ previous lenient threshold and a single lifted foot are rejected (0.136382ms)
+✔ shoulders and hips detect takeoff even when both ankles lag or are hidden (0.213255ms)
+✔ hip-only or shoulder-only motion cannot trigger early takeoff (0.190111ms)
+✔ fast stand-up stops at neutral without jumping with visible or hidden feet (0.259084ms)
+✔ fast bilateral takeoff triggers below the old height threshold at varied frame rates (0.232444ms)
+✔ early takeoff ignores one-frame spikes, single-foot hops and grounded stand-ups (0.211814ms)
+✔ slow jumps retain height detection; a tracking gap cannot fabricate velocity (0.349628ms)
+✔ strong takeoff with bilateral moving feet triggers on the first low-rate interval (0.113899ms)
+✔ ankle baseline drift alone cannot confirm an early stand-up overshoot (0.075091ms)
+✔ only one frame in flight; next capture uses current video rather than queued frames (3.145858ms)
+✔ stale results are ignored and stopped sessions cannot deliver controls (0.379852ms)
+✔ bitmap created after stop is closed without posting (0.771732ms)
+✔ late getUserMedia cannot replace a newer session (0.432841ms)
+✔ disconnect terminates inference, reports error once, and can reconnect (0.732224ms)
+✔ worker initialization failure settles start and exposes recovery (0.485599ms)
+✔ a new frame is processed without an extra 32ms throttle (0.457788ms)
+✔ video callbacks capture independently of rendering and stop cancels them (0.515263ms)
+✔ results over 250ms are dropped and accepted results expose local timings (0.603334ms)
+✔ video and pose frame rates are separate and discarded frames never reach controls (1.030356ms)
+✔ backend selection terminates the old worker and resets its measurements (0.423978ms)
+✔ inference median excludes warmup and resets after GPU recovery changes delegate (2.483808ms)
+✔ duplicate and out-of-order inference results never count as new frames (0.292723ms)
+✔ camera and model preparation are distinct from recognition (1.064066ms)
+ℹ tests 35
+ℹ suites 0
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 121.003863

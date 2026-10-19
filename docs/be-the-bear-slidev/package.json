@@ -1,0 +1,19 @@
+{
+  "name": "be-the-bear-talk",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "slidev --open",
+    "build": "slidev build",
+    "export": "slidev export --output Be-The-Bear.pdf"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans-jp": "^5.2.0",
+    "@slidev/cli": "53.0.0",
+    "@slidev/theme-default": "^0.25.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "playwright-chromium": "1.56.1"
+  }
+}
