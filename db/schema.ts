@@ -1,0 +1,7 @@
+import {sqliteTable,text,integer,primaryKey} from 'drizzle-orm/sqlite-core';
+export const profiles=sqliteTable('profiles',{userId:text('user_id').primaryKey(),coins:integer('coins').notNull().default(0),owned:text('owned').notNull().default('[]'),equipped:text('equipped').notNull().default('none'),bestMs:integer('best_ms'),bestCloudMs:integer('best_cloud_ms'),bestRidgeMs:integer('best_ridge_ms')});
+export const runs=sqliteTable('runs',{userId:text('user_id').notNull(),runId:text('run_id').notNull(),coins:integer('coins').notNull(),timeMs:integer('time_ms').notNull(),courseId:text('course_id').notNull().default('alpine-2000'),claimed:integer('claimed').notNull().default(0)},t=>[primaryKey({columns:[t.userId,t.runId]})]);
+export const gameUsers=sqliteTable('game_users',{userId:text('user_id').primaryKey(),login:text('login').notNull().unique(),passwordHash:text('password_hash').notNull(),salt:text('salt').notNull(),recoveryHash:text('recovery_hash').notNull()});
+export const gameSessions=sqliteTable('game_sessions',{tokenHash:text('token_hash').primaryKey(),userId:text('user_id').notNull().references(()=>gameUsers.userId),expiresAt:integer('expires_at').notNull()});
+export const gameAuthLimits=sqliteTable('game_auth_limits',{key:text('key').primaryKey(),attempts:integer('attempts').notNull(),expiresAt:integer('expires_at').notNull()});
+export const gameLegacyClaims=sqliteTable('game_legacy_claims',{legacyId:text('legacy_id').primaryKey(),userId:text('user_id').notNull().references(()=>gameUsers.userId),claimed:integer('claimed').notNull().default(0)});

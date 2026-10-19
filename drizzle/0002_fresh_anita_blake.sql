@@ -1,0 +1,1 @@
+ALTER TABLE `profiles` ADD `best_ridge_ms` integer;
