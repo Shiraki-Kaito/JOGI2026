@@ -6,7 +6,8 @@ import {createRunSimulation,MAX_X} from './run-simulation.js';
 import {beforeGoal} from './collectibles.js';
 import {initI18n,preferences} from './i18n.js';
 import {createSound} from './sound.js';
-import { PoseRecording, compareRecording, validateRecording, summarizeExperiment } from './pose-recording.js';
+import { mountMotionCheck } from './motion-check.js';
+import { PoseRecording } from './pose-recording.js';
 import {MotionExperiment} from './motion-experiment.js';
 import { rampHeight, nextRamp } from './ramps.js';
 import { COURSE } from './course.js';
@@ -215,7 +216,6 @@ const input = bindGameInput({
 });
 const poseRecording = new PoseRecording();
 const motionExperiment = new MotionExperiment((now, sample) => poseRecording.addExperiment(now, sample));
-let recordingOpen=false,recordingReported=false,lastTimingDisplay=-Infinity,lightRendering=false,engineBaseline=null;
 
 const camera = new GameCamera({
   recording: poseRecording,
@@ -234,6 +234,16 @@ const camera = new GameCamera({
     begin(!resume);
   },
   onJump: jump,
+});
+
+const motionCheck = mountMotionCheck({
+  recording: poseRecording,
+  experiment: motionExperiment,
+  camera,
+  pause,
+  isPaused: () => state === 'paused',
+  isCameraMode: () => mode === 'camera',
+  setLowLatency: (enabled) => world.setLowLatency(enabled),
 });
 
 $('retry-camera').onclick = () => camera.open();
@@ -310,57 +320,10 @@ function animate(now){
  world.render({state,mode,now,dt,menuArtwork:state==='title'||menuArtworkActive,distance:run.distance+finishTravel,finishTime,playerX:run.playerX,vertical:run.vertical,
   steer:livePose?camera.steer:run.steer,tuck:livePose?camera.tuck:run.tuck,speed:run.speed});
  camera.markRendered(renderStarted, state === 'playing' ? run.vertical - rampHeight(run.distance) : 0);
- updateRecording(now);
+ motionCheck.update(now);
  updateHUD({elapsed:run.elapsed,crystals:run.crystals,distance:run.distance,score:run.score,speed:run.speed,tuck:run.tuck,
   vertical:run.vertical,state,courseLength:COURSE_LENGTH,ramp:nextRamp(run.distance),ground:rampHeight(run.distance)});
  if(now>toastUntil)$('toast').classList.remove('show');
 }
 loadAccount();requestAnimationFrame(animate);addEventListener('resize',()=>world.resize());
 if(document.modelContext?.registerTool){const tools=[{name:'get_ski_run',description:'Read the current skiing game state and score.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true},execute:()=>({state,mode,score:Math.floor(run.score),elapsedSeconds:run.elapsed,remainingMeters:Math.ceil(COURSE_LENGTH-run.distance),crystals:run.crystals,jumps:run.jumps})},{name:'start_keyboard_run',description:'Start a new 1,500-meter skiing run with keyboard controls. Replaces the current run.',inputSchema:{type:'object',properties:{},additionalProperties:false},execute:input=>{if(input&&Object.keys(input).length)throw Error('No arguments expected');if(!account.data)throw Error('Account not loaded');camera.stop();mode='keyboard';begin();return{state,mode};}}];for(const tool of tools){try{Promise.resolve(document.modelContext.registerTool(tool)).catch(console.warn);}catch(e){console.warn(e);}}}
-function reportRecording(){
- const report=compareRecording(poseRecording.data);window.bearSkiLastReplay=()=>structuredClone(report);
- const lines=report.runs.map(r=>`${r.filter==='none'?'標準':'1€ Filter'}：${r.count}回検出 / ${r.events.length?Math.round(r.events.reduce((s,e)=>s+e.observedLiftToDetectionMs,0)/r.events.length)+'ms':'—'}（上昇観測→判定）`);
- const rate=report.poseFps?`認識更新：約${report.poseFps.toFixed(1)}fps（${Math.round(report.intervalMs)}ms間隔）`:'更新間隔：計測なし';
- const inference=report.timings.inferenceMs!==null?`推論：${Math.round(report.timings.inferenceMs)}ms / 結果の古さ：${Math.round(report.timings.resultAgeMs??0)}ms`:'推論時間：未記録';
- $('recording-summary').textContent=`${report.frames}フレーム\n${rate}\n${inference}\n${lines.join('\n')}\n${report.label==='jump'?'実際に跳んだ回数と比較してください。':'ジャンプ以外の記録では、0回が目標です。'}`;
- $('recording-download').disabled=false;recordingReported=true;
- const experiment=summarizeExperiment(poseRecording.data.experiment);
- if(experiment.frames)$('recording-summary').textContent+=`\n画像追跡：${experiment.candidates}候補 / 骨格：${experiment.poseCandidates}候補\n追跡処理：${Math.round(experiment.medianMs??0)}ms / 先行して近接した候補：${experiment.matched}回（平均${experiment.meanLeadMs==null?'—':Math.round(experiment.meanLeadMs)+'ms'}先）\n対応未確認：${experiment.unmatched}候補\n※近接時刻による仮対応です。正解率・実際のジャンプ遅延ではありません。`;
-}
-function updateRecording(now){
- if(!recordingOpen)return;const phase=poseRecording.tick(now);
- if(now-lastTimingDisplay>250){
-  lastTimingDisplay=now;const t=camera.device.diagnostics?.();
-  const ms=value=>Number.isFinite(value)?`${Math.round(value)}ms`:'—';
-  const fps=value=>value>0?`${value.toFixed(1)}fps`:'—';
-  $('live-timings').textContent=t?`${t.recovering?'認識を復旧中…':`認識：${t.delegate??'準備中'}`}\nカメラ：${fps(t.cameraFps)} / 骨格：${fps(t.poseFps)}\n画像準備：${ms(t.captureMs)} / 認識処理：${ms(t.inferenceMs)}${t.inferenceMedianMs!=null?`\n認識処理の中央値：${ms(t.inferenceMedianMs)}（直近${t.inferenceSamples}回）`:''}\n取得開始→描画完了：${ms(t.visibleAgeMs)} / 描画処理：${ms(t.renderMs)}${engineBaseline?`\n切替前の${engineBaseline.delegate}：${ms(engineBaseline.inferenceMs)} / ${fps(engineBaseline.poseFps)}`:''}\n※カメラ内部・モニター表示の遅延は含みません。`:'カメラを接続すると処理時間を確認できます。';
-  $('inference-switch').disabled=mode!=='camera'||!camera.ready;
-  $('inference-switch').textContent=t?.delegate==='CPU'?'GPUで試す':'CPUで試す';
-  $('flow-status').textContent=`画像追跡：${motionExperiment.status}${motionExperiment.worker?` / ${Math.round(motionExperiment.stats.processingMs??0)}ms / 追跡点${motionExperiment.stats.tracked??0}/6`:''}`;
-  $('flow-toggle').textContent=motionExperiment.worker?'画像追跡の実験を止める':'画像追跡を比較する（実験）';
-  $('flow-toggle').disabled=!camera.ready||!$('video').requestVideoFrameCallback;
- }
- $('recording-start').disabled=['waiting','recording'].includes(phase)||!camera.baseline||!camera.ready;
- if(phase==='waiting')$('recording-status').textContent=`あと${Math.ceil((poseRecording.startAt-now)/1000)}秒で記録開始。カメラから離れてください。`;
- if(phase==='recording')$('recording-status').textContent=`記録中：残り${Math.ceil((poseRecording.endAt-now)/1000)}秒`;
- if(phase==='done'&&!recordingReported){$('recording-status').textContent='記録完了';reportRecording();}
- if(phase==='cancelled')$('recording-status').textContent='記録を中止しました。';
-}
-$('recording-open').onclick=()=>{pause();show('paused',false);recordingOpen=true;lastTimingDisplay=-Infinity;show('motion-check',true);$('recording-status').textContent=camera.baseline&&camera.ready?'記録する動きを選んでください。':'からだで遊び、姿勢合わせ後に一時停止して開いてください。';updateRecording(performance.now());};
-$('recording-close').onclick=()=>{poseRecording.cancel();recordingOpen=false;show('motion-check',false);if(state==='paused')show('paused',true);};
-$('recording-start').onclick=()=>{if(!camera.baseline||!camera.ready)return;motionExperiment.resetComparison();poseRecording.start(performance.now(),camera.baseline,$('recording-label').value);recordingReported=false;$('recording-summary').textContent='';$('recording-download').disabled=true;updateRecording(performance.now());};
-$('recording-download').onclick=()=>{if(!poseRecording.data||!recordingReported)return;const url=URL.createObjectURL(new Blob([JSON.stringify(poseRecording.data)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='bear-ski-motion.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-$('recording-import').onchange=async e=>{try{const file=e.target.files?.[0];if(!file)return;if(file.size>1500000)throw Error('記録ファイルが大きすぎます。');poseRecording.cancel();poseRecording.data=validateRecording(JSON.parse(await file.text()));poseRecording.phase='done';reportRecording();$('recording-status').textContent='端末内で再生・比較しました。';}catch(error){$('recording-status').textContent=error.message;}finally{e.target.value='';}};
-
-$('jump-filter').onchange=() => camera.setJumpFilter($('jump-filter').value);
-$('flow-toggle').onclick=()=>{if(motionExperiment.worker)motionExperiment.stop();else if(camera.ready)motionExperiment.start();updateRecording(performance.now());};
-
-$('render-quality').onclick=()=>{lightRendering=!lightRendering;world.setLowLatency(lightRendering);$('render-quality').textContent=lightRendering?'通常の描画に戻す':'描画を軽くする';};
-$('inference-switch').onclick=async()=>{
- if(mode!=='camera'||!camera.ready)return;
- const t=camera.device.diagnostics?.();
- engineBaseline=t?{delegate:t.delegate,inferenceMs:t.inferenceMedianMs??t.inferenceMs,poseFps:t.poseFps}:null;
- camera.device.preferredDelegate=t?.delegate==='CPU'?'GPU':'CPU';
- poseRecording.cancel();recordingOpen=false;show('motion-check',false);
- await camera.open(true);
-};
