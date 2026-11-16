@@ -1,3 +1,4 @@
+import { bindGameInput } from './game-input.js';
 import {createMenuArtwork} from './menu-art.js';
 import {bindViewportUI} from './viewport-ui.js';
 import {createRunSimulation,MAX_X} from './run-simulation.js';
@@ -38,7 +39,7 @@ authUI=mountAuthUI(account,()=>loadAccount());
 async function loadAccount(){['bear-start','camera-start','keyboard-start'].forEach(id=>$(id).disabled=true);show('account-retry',false);try{await account.load();['bear-start','camera-start','keyboard-start'].forEach(id=>$(id).disabled=false);}catch(e){$('account-status').textContent=e.message;show('account-retry',true);}}
 let shopSoundToken=0;
 function openShop(){
- if(!titleAvailable()||!account.data||!account.open())return;
+ if(!lobbyAvailable()||!account.data||!account.open())return;
  const token=++shopSoundToken;
  // 表示は同期で完了。初回のAudioContext復帰だけを待ち、古い開店要求は再生しない。
  try{const prepared=audio.prepare();if(!audio.play('door'))Promise.resolve(prepared).then(()=>{
@@ -49,8 +50,9 @@ $('shop-open').onclick=openShop;$('help-open').onclick=()=>openHelp();$('help-cl
 async function saveFinish(){if(!finishRecord)return;['again','result-home','save-retry'].forEach(id=>$(id).disabled=true);$('save-status').textContent='記録とコインを保存中…';show('save-status',true);show('save-retry',false);try{if(runAccountId!==(account.identity?.id??'guest'))throw Error('アカウントが変わったため、この滑走を別のアカウントには保存できません。');const p=await account.save(finishRecord);$('save-status').textContent=p.guest&&p.durable===false?'このタブを閉じるとゲストの記録は消えます。':'';show('save-status',!!$('save-status').textContent);['again','result-home'].forEach(id=>$(id).disabled=false);}catch(e){$('save-status').textContent=e.message+' この画面を閉じずに再試行してください。';show('save-retry',true);}finally{$('save-retry').disabled=false;}}
 $('save-retry').onclick=saveFinish;
 function activeOverlay(){return document.querySelector?.('.overlay:not(.hidden)');}
-let lobbyInputUnlockAt=0,titleStartKey=null;
-function titleAvailable(){return state==='lobby'&&!activeOverlay()&&!titleStartKey&&performance.now()>=lobbyInputUnlockAt;}
+function lobbyAvailable() {
+  return state === 'lobby' && !activeOverlay() && !input.lobbyInputLocked();
+}
 function selectHelp(selected){
  $('help-controls').innerHTML=controlGuide(selected);
  for(const [id,value] of [['help-body','camera'],['help-keyboard','keyboard']]){
@@ -84,8 +86,62 @@ function resetRun(){
  objects.forEach(o=>o.visible=beforeGoal(o.userData.along));
  trees.forEach((t,i)=>t.userData.along=i*360/treeCount);
 }
-function begin(fresh=true){show('splash',false);audio.prepare();show('control-select',false);show('help',false);$('scene').focus({preventScroll:true});if(fresh)resetRun();show('start',false);show('setup',false);show('result',false);show('paused',false);document.body.classList.add('in-run');show('hud',true);show('pause',true);show('touch',mode==='keyboard');show('mini',mode==='camera');keys.clear();state='countdown';countTime=mode==='camera'?.6:3;show('countdown',true);$('countdown').textContent=mode==='camera'?'準備OK':'3';}
-function pause(reason=''){if(state!=='playing')return;state='paused';audio.stop();keys.clear();show('paused',true);$('pause-title').textContent=reason?'全身を映してください':'ひと休み。';$('pause-copy').textContent=reason||'準備ができたら、続きを滑ろう。';show('recalibrate',mode==='camera');}
+// 各遷移で切り替える要素だけを指定する。ヘルプや認証ダイアログは個別に開閉する。
+const screenElements = {
+  title: { hide: ['start'], show: ['splash'] },
+  lobby: {
+    hide: ['splash', 'control-select', 'hud', 'pause', 'paused', 'result', 'mini', 'touch', 'setup', 'countdown', 'goal-banner'],
+    show: ['start', 'topbar'],
+  },
+  choosing: { hide: ['start'], show: ['control-select'] },
+  setup: {
+    hide: ['splash', 'control-select', 'start', 'paused', 'result', 'mini', 'pause', 'touch', 'countdown'],
+    show: ['setup'],
+  },
+  countdown: {
+    hide: ['splash', 'control-select', 'help', 'start', 'setup', 'result', 'paused'],
+    show: ['hud', 'pause', 'countdown'],
+  },
+  playing: { hide: ['countdown'] },
+  paused: { show: ['paused'] },
+  celebrating: { hide: ['result', 'pause', 'touch', 'mini'], show: ['goal-banner'] },
+  result: { hide: ['goal-banner'], show: ['result'] },
+};
+
+function enterScreen(nextState) {
+  const { hide: hidden = [], show: visible = [] } = screenElements[nextState];
+  state = nextState;
+  hidden.forEach((id) => show(id, false));
+  visible.forEach((id) => show(id, true));
+}
+
+const KEYBOARD_COUNTDOWN_SECONDS = 3;
+const CAMERA_COUNTDOWN_SECONDS = 0.6;
+
+function begin(fresh = true) {
+  audio.prepare();
+  if (fresh) resetRun();
+  keys.clear();
+  const cameraMode = mode === 'camera';
+  countTime = cameraMode ? CAMERA_COUNTDOWN_SECONDS : KEYBOARD_COUNTDOWN_SECONDS;
+  enterScreen('countdown');
+  document.body.classList.add('in-run');
+  show('touch', mode === 'keyboard');
+  show('mini', cameraMode);
+  $('countdown').textContent = cameraMode ? '準備OK' : String(countTime);
+  $('scene').focus({ preventScroll: true });
+}
+
+function pause(reason = '') {
+  if (state !== 'playing') return;
+  enterScreen('paused');
+  audio.stop();
+  keys.clear();
+  $('pause-title').textContent = reason ? '全身を映してください' : 'ひと休み。';
+  $('pause-copy').textContent = reason || '準備ができたら、続きを滑ろう。';
+  show('recalibrate', mode === 'camera');
+}
+
 function finish(){
  if(finishRecord)return;
  audio.stop();stopCamera();keys.clear();
@@ -93,33 +149,77 @@ function finish(){
  finishRecord=Object.freeze({runId,courseId:COURSE.id,coins:run.crystals,timeMs:Math.round(run.elapsed*1000)});
  $('final-time').textContent=formatTime(finishRecord.timeMs);
  $('new-best').textContent=account.data?.bestMs==null||finishRecord.timeMs<account.data.bestMs?'自己ベスト！':'';
- saveFinish();state='celebrating';
- show('goal-banner',true);show('result',false);show('pause',false);show('touch',false);show('mini',false);
+ saveFinish();
+ enterScreen('celebrating');
  $('final-score').textContent=Math.floor(run.score).toLocaleString();
  $('final-crystals').textContent=run.crystals;
  audio.play('goal');
 }
-function home(){show('splash',false);document.body.classList.remove('in-run');show('control-select',false);state='lobby';stopCamera();mode='keyboard';resetRun();keys.clear();['hud','pause','paused','result','mini','touch','setup','countdown','goal-banner'].forEach(id=>show(id,false));['start','topbar'].forEach(id=>show(id,true));document.body.classList.remove('night');$('start').inert=false;for(const id of ['bear-start','shop-open'])$(id).disabled=!account.data;$('bear-start').focus({preventScroll:true});}
-$('bear-start').onclick=()=>{if(!titleAvailable()||!account.data)return;state='choosing';show('start',false);show('control-select',true);$('camera-start').focus();};
-function enterLobbyFromTitle(event){
- if(state!=='title'||$('title-start').disabled)return;
- event?.preventDefault?.();event?.stopPropagation?.();
- lobbyInputUnlockAt=performance.now()+350;home();
+function home() {
+  enterScreen('lobby');
+  document.body.classList.remove('in-run');
+  stopCamera();
+  mode = 'keyboard';
+  resetRun();
+  keys.clear();
+  document.body.classList.remove('night');
+  $('start').inert = false;
+  for (const id of ['bear-start', 'shop-open']) $(id).disabled = !account.data;
+  $('bear-start').focus({ preventScroll: true });
 }
-$('title-start').onclick=enterLobbyFromTitle;
-// 遷移元のclick/キー解放が、移動先のボタンに再利用されるのを防ぐ。
-document.addEventListener('click',event=>{
- if(state==='lobby'&&(titleStartKey||performance.now()<lobbyInputUnlockAt)){
-  event.preventDefault();event.stopImmediatePropagation();
- }
-},true);
-$('lobby-title').onclick=()=>{if(!titleAvailable())return;state='title';show('start',false);show('splash',true);$('title-start').focus();};
+
+$('bear-start').onclick = () => {
+  if (!lobbyAvailable() || !account.data) return;
+  enterScreen('choosing');
+  $('camera-start').focus();
+};
+$('lobby-title').onclick = () => {
+  if (!lobbyAvailable()) return;
+  enterScreen('title');
+  $('title-start').focus();
+};
 $('play-button').onclick=()=>$('bear-start').onclick();
 $('shop-button').onclick=()=>$('shop-open').onclick();
 $('control-cancel').onclick=home;$('scan-home').onclick=home;
-$('keyboard-start').onclick=()=>startKeyboard();$('pause').onclick=()=>pause();$('resume').onclick=()=>{if(mode==='camera'&&performance.now()-lastPoseAt>800){enterCalibration(true);if(!cameraReady)openCamera();return;}begin(false);};$('back-home').onclick=home;$('result-home').onclick=home;$('again').onclick=()=>{if(mode==='camera')openCamera();else startKeyboard();};$('cancel-camera').onclick=()=>{const resume=resumeAfterCalibration;startKeyboard(!resume);};$('camera-start').onclick=()=>{audio.prepare();resumeAfterCalibration=false;return openCamera();};$('recalibrate').onclick=()=>{resumeAfterCalibration=true;openCamera();};
-window.addEventListener('keydown',e=>{const overlay=activeOverlay();if(overlay&&!(e.code==='Escape'&&state==='paused'&&overlay.id==='paused'))return;if(state==='title'&&['Enter','Space'].includes(e.code)){e.preventDefault();if(!e.repeat){titleStartKey=e.code;enterLobbyFromTitle();}return;}if(titleStartKey&&e.code===titleStartKey){e.preventDefault();return;}if(e.target?.closest?.('input,textarea,select')||(e.target?.closest?.('button,a')&&['Space','Enter'].includes(e.code))||!['playing','paused','countdown'].includes(state))return;if(['ArrowLeft','ArrowRight','ArrowDown','ArrowUp','Space','Escape'].includes(e.code))e.preventDefault();keys.add(e.code);if((e.code==='Space'||e.code==='ArrowUp')&&!e.repeat&&mode==='keyboard')jump();if(e.code==='Escape'){if(state==='playing')pause();else if(state==='paused')$('resume').click();}});window.addEventListener('keyup',e=>{if(e.code===titleStartKey){e.preventDefault();titleStartKey=null;lobbyInputUnlockAt=performance.now()+350;}keys.delete(e.code);});window.addEventListener('blur',()=>{if(titleStartKey){titleStartKey=null;lobbyInputUnlockAt=performance.now()+350;}keys.clear();pause();});document.addEventListener('visibilitychange',()=>{if(document.hidden)pause();});
-for(const [id,key] of [['touch-left','ArrowLeft'],['touch-right','ArrowRight'],['touch-tuck','ArrowDown']]){const el=$(id);el.onpointerdown=e=>{if((state!=='playing'&&state!=='countdown')||activeOverlay())return;el.setPointerCapture(e.pointerId);keys.add(key);};el.onpointerup=el.onpointercancel=()=>keys.delete(key);}$('touch-jump').onpointerdown=()=>{if(state==='playing'&&!activeOverlay())jump();};
+function resumeRun() {
+  if (mode === 'camera' && performance.now() - lastPoseAt > CAMERA_RESUME_MAX_POSE_AGE_MS) {
+    enterCalibration(true);
+    if (!cameraReady) openCamera();
+    return;
+  }
+  begin(false);
+}
+
+const CAMERA_RESUME_MAX_POSE_AGE_MS = 800;
+$('keyboard-start').onclick = () => startKeyboard();
+$('pause').onclick = () => pause();
+$('resume').onclick = resumeRun;
+$('back-home').onclick = home;
+$('result-home').onclick = home;
+$('again').onclick = () => {
+  if (mode === 'camera') openCamera();
+  else startKeyboard();
+};
+$('cancel-camera').onclick = () => startKeyboard(!resumeAfterCalibration);
+$('camera-start').onclick = () => {
+  audio.prepare();
+  resumeAfterCalibration = false;
+  return openCamera();
+};
+$('recalibrate').onclick = () => {
+  resumeAfterCalibration = true;
+  openCamera();
+};
+
+const input = bindGameInput({
+  keys,
+  getState: () => state,
+  getMode: () => mode,
+  activeOverlay,
+  openLobby: home,
+  jump,
+  pause,
+});
 let lastScanResultAt=-Infinity,scanPhase='';
 function setScanPhase(phase){if(scanPhase===phase)return;scanPhase=phase;$('setup').setAttribute('data-scan-phase',phase);$('cancel-camera').hidden=phase!=='error';}
 let lastPoseAt=0,landmarks=null,worldLandmarks=null,baseline=null,poseSteer=0,poseTuck=0,poseInputValid=false,camToken=0;
@@ -127,14 +227,28 @@ const autoCal = new AutoCalibration();const jumpDetector=new JumpDetector();let 
 const poseRecording=new PoseRecording();let recordingOpen=false,recordingReported=false,lastTimingDisplay=-Infinity,lightRendering=false,engineBaseline=null;
 const motionExperiment=new MotionExperiment((now,sample)=>poseRecording.addExperiment(now,sample));
 let jumpTiming=null,pendingJumpRender=false;
-function enterCalibration(resume=false){
-show('splash',false);
-lastScanResultAt=-Infinity;setScanPhase(cameraReady?'missing':'preparing');
-audio.stop();
-motionExperiment.stop();
-poseRecording.cancel();pendingJumpRender=false;show('control-select',false);show('start',false);state='setup';scanStartedAt=performance.now();scanReport=null;show('retry-camera',false);resumeAfterCalibration=resume;keys.clear();baseline=null;autoCal.reset();jumpDetector.reset();poseInputValid=false;poseSteer=poseTuck=run.steer=run.tuck=0;
-['paused','result','mini','pause','touch','countdown'].forEach(id=>show(id,false));show('setup',true);$('camera-slot').append($('camera-frame'));show('camera-frame',true);show('guide',true);updateScanHint('全身を映してください');
-
+function enterCalibration(resume = false) {
+  lastScanResultAt = -Infinity;
+  setScanPhase(cameraReady ? 'missing' : 'preparing');
+  audio.stop();
+  motionExperiment.stop();
+  poseRecording.cancel();
+  pendingJumpRender = false;
+  enterScreen('setup');
+  scanStartedAt = performance.now();
+  scanReport = null;
+  show('retry-camera', false);
+  resumeAfterCalibration = resume;
+  keys.clear();
+  baseline = null;
+  autoCal.reset();
+  jumpDetector.reset();
+  poseInputValid = false;
+  poseSteer = poseTuck = run.steer = run.tuck = 0;
+  $('camera-slot').append($('camera-frame'));
+  show('camera-frame', true);
+  show('guide', true);
+  updateScanHint('全身を映してください');
 }
 const poseCamera=new PoseCamera({video:$('video'),onResult:handlePose,onError:cameraError,onPhase:phase=>{
  if(phase==='recovering'){enterCalibration(['playing','countdown','paused'].includes(state)||resumeAfterCalibration);setScanPhase('preparing');$('camera-status').textContent='姿勢認識を復旧中…';}
@@ -199,12 +313,12 @@ function animate(now){
  detect(now);
  // 取得開始の時刻を使い、古い入力の停止と再スキャンを別々に扱う。
  if(mode==='camera'&&now-lastPoseAt>350){poseInputValid=false;poseSteer=poseTuck=0;}
- if(state==='countdown'&&mode==='camera'&&now-lastPoseAt>800)enterCalibration(true);
+ if(state==='countdown'&&mode==='camera'&&now-lastPoseAt>CAMERA_RESUME_MAX_POSE_AGE_MS)enterCalibration(true);
  if(state==='countdown'){
   countTime-=realDt;
   $('countdown').textContent=mode==='camera'?'準備OK':String(Math.ceil(countTime));
   if(countTime<=0){
-   show('countdown',false);state='playing';lastPoseAt=now;
+   enterScreen('playing');lastPoseAt=now;
    jumpDetector.reset();poseInputValid=false;poseSteer=poseTuck=0;
   }
  }
@@ -234,12 +348,12 @@ function animate(now){
   run.steer=THREE.MathUtils.damp(run.steer,0,4,dt);
   run.tuck=THREE.MathUtils.damp(run.tuck,0,4,dt);
   advanceFlight(dt);
-  if(finishTime>=2.5){world.finishLine.dispose();state='result';show('goal-banner',false);show('result',true);}
+  if(finishTime>=2.5){world.finishLine.dispose();enterScreen('result');}
  }
  audio.updateGlide({active:state==='playing',speed:run.speed,turn:run.steer,grounded:run.vertical-rampHeight(run.distance)<.2});
  document.body.classList.toggle('splash-view',state==='title');
  show('language-switch',state==='lobby'&&!modalOpen);show('topbar',state!=='title'&&state!=='setup');
- const titleInteractive=titleAvailable();$('start').inert=!titleInteractive;
+ const titleInteractive=lobbyAvailable();$('start').inert=!titleInteractive;
  for(const id of ['bear-start','shop-open','play-button','shop-button'])$(id).disabled=!titleInteractive||!account.data;
  const renderStarted=performance.now(),livePose=mode==='camera'&&state==='playing'&&poseInputValid;
  // タイトルは画像の読み込み中・失敗時も旧3Dへ切り替えない。
