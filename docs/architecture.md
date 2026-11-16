@@ -10,10 +10,13 @@
 
 | モジュール | 責務 |
 |---|---|
-| web/game.js | 画面遷移、入力の受け渡し、フレーム更新、完走記録の確定・保存開始 |
+| [game.js](../web/game.js) | 画面と操作モードを管理する。入力を滑走計算へ渡し、結果を描画・HUDに反映して、完走時に記録を確定する |
+| [game-input.js](../web/game-input.js) | キー・タッチの押下と解放を処理し、押下中のキーを更新する。画面に応じてジャンプや一時停止を要求する |
+| [game-camera.js](../web/game-camera.js) | 身体操作のセッションを管理する。スキャン中は基準姿勢を集め、滑走中は姿勢から左右移動・加速を更新し、ジャンプを要求する |
+| [motion-check.js](../web/motion-check.js) / [pose-recording.js](../web/pose-recording.js) / [motion-experiment.js](../web/motion-experiment.js) | 「動きの確認」画面、骨格の記録・再生比較、実験用の画像追跡をそれぞれ担当する |
 | run-simulation / course / ramps / jump-flight / collectibles | 滑走状態、コース・台・飛行・取得・衝突・完走。描画や通信から分離 |
-| pose-camera / public/pose-worker | カメラとWorkerの開始・停止、推論、フレームの鮮度 |
-| pose-input / auto-calibration / body-control | 骨格の変換、基準姿勢の確定、操作判定 |
+| [pose-camera.js](../web/pose-camera.js) / [public/pose-worker.js](../web/public/pose-worker.js) | PoseCameraが映像トラックと推論Workerを起動・解放し、結果の鮮度を確認する。WorkerはMediaPipeでフレームから骨格を推定する |
+| [pose-input.js](../web/pose-input.js) / [auto-calibration.js](../web/auto-calibration.js) / [body-control.js](../web/body-control.js) | 骨格の測定・操作量への変換、安定した基準姿勢の確定、ジャンプの判定をそれぞれ担当する |
 | ski-world / course-surface / finish-line / resort-scene | Three.jsの描画、雪面、ゴール、終着エリア |
 | menu-art / menu-scene / title-scene / lobby-actions | メニュー画像・代替3D構図、見た目に対応する操作領域、ボタン配置 |
 | game-ui / auth-ui / shop-view / i18n / translations | 画面、認証フォーム、ショップ、共通翻訳 |
@@ -22,27 +25,39 @@
 | worker/index / game-auth / account-api | ルーティング、認証・セッション、記録・購入処理 |
 | db / drizzle | スキーマ定義と移行SQL |
 
-画面状態はgame、数値の滑走状態はsimulation、メッシュ・カメラはworldが所有します。取得物は配置とcollectedを共有するレコードで管理し、描画と取得判定の位置を一致させます。各ジャンプ台の袋は3個、横位置−13/0/＋13mで、1袋10コインです。
+画面状態はgame、数値の滑走状態はsimulation、メッシュと描画用の3Dカメラはworldが所有します。取得物は配置とcollectedを共有するレコードで管理し、描画と取得判定の位置を一致させます。各ジャンプ台の袋は3個、横位置−13/0/＋13mで、1袋10コインです。
 
 ## 入力から描画
 
 ```mermaid
-flowchart LR
-  Camera[カメラ] --> Capture[PoseCamera]
-  Capture <--> Worker[MediaPipe Worker]
-  Capture --> Convert[pose-input]
-  Convert --> Controls[姿勢合わせ・操作判定]
-  Controls --> Game[game]
-  Keys[キー・タッチ] --> Game
-  Game --> Simulation[run-simulation]
-  Simulation --> Game
-  Game --> View[Three.js・UI・音声]
+flowchart TD
+  Device["カメラ映像"] --> Capture["PoseCamera"]
+  Capture -->|フレーム| Worker["pose-worker / MediaPipe"]
+  Worker -->|骨格と取得時刻| Capture
+  Capture -->|採用した結果| Pose["GameCamera.handlePose / poseMeasures"]
+  Pose -->|スキャン中| Scan["AutoCalibration"]
+  Scan -->|基準姿勢が確定| Begin["game.begin / カウントダウン"]
+  Pose -->|滑走中| Controls["poseControls / 左右移動・加速"]
+  Pose -->|滑走中| Detector["JumpDetector"]
+  Controls -->|steer・tuck・valid| Step["game.simulate → simulation.step"]
+  Detector -->|ジャンプ検出| Jump["game.jump → simulation.jump"]
+  Keys["キー・タッチ / game-input"] -->|押下中の方向・加速| Step
+  Keys -->|ジャンプ要求| Jump
+  Step --> Run["滑走状態 / 横位置・速度・高さ"]
+  Jump --> Run
+  Run --> Render["game.animate → world.render / HUD更新"]
 ```
 
-- 推論は同時に1フレームとし、古いフレームをキューへ積みません。GPUを初期値とし、CPU切替・復旧経路を備えます。
-- 骨格は画像の正規化座標から操作用の測定値へ変換します。正面カメラの左右反転は入力変換で扱います。
-- 入力はsteer（−1〜1）、tuck（0〜1）、有効性とジャンプ要求へ変換します。姿勢合わせ中はゲーム操作へ反映しません。
-- 基準姿勢は新しい有効フレームと安定性から確定します。未検出・古い認識結果では入力を止め、再スキャン後は同じ滑走を再開します。
+### 身体操作をコードとテストでたどる
+
+| 場面 | 処理 | 実装 | 対応するテスト |
+|---|---|---|---|
+| 映像を受け取る | 取得時刻から250ms以内で、前回より新しい推論結果をゲームへ渡す。 | [結果の採用条件](../web/pose-camera.js#L51) | [古い結果と停止後の応答](../tests/pose-camera.test.js#L17) |
+| 姿勢を合わせる | 全身が映った安定サンプルから基準姿勢を確定する。スキャン中の動きでクマが跳ぶことはない。 | [collectCalibration](../web/game-camera.js#L187) | [重複フレームとスキャン完了](../tests/run.test.js#L200) |
+| 左右移動・加速 | 基準姿勢に対する重心移動と前傾から操作量を求める。次の物理更新で横位置と速度が変わり、体を中央に戻すとその横位置で止まる。 | [poseControls](../web/pose-input.js#L45) → [simulate](../web/game.js#L259) → [横位置の更新](../web/run-simulation.js#L117) | [左右の向き・停止・加速](../tests/run.test.js#L333) |
+| ジャンプ | 骨格サンプルを受け取った時点でジャンプを判定し、成立すれば飛行を開始する。次の描画では更新した高さを使う。 | [applyControls](../web/game-camera.js#L214) | [離陸判定から次の描画まで](../tests/run.test.js#L54) |
+| 追跡を失ったとき | 最後の有効姿勢から350msを超えると操作量をクリアする。滑走中に1,500msを超えると再スキャンし、同じ滑走を再開する。 | [フレームごとの鮮度確認](../web/game.js#L278) | [距離・コインを保った再開](../tests/run.test.js#L40) |
+
 - 距離・高さはm、速度はm/s、シミュレーションの時間は秒です。描画はahead=along−distance、z=−aheadとして前方を表します。
 - ジャンプの高さは描画と衝突・取得で共通です。完走は1,500mで記録を確定し、祝い演出中の移動や入力で報酬を変更しません。
 - 画像追跡は比較用の実験機能であり、通常のジャンプ判定には使用しません。
