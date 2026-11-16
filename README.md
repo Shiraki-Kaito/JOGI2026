@@ -4,10 +4,6 @@
 
 **[Be The Bear を遊ぶ](https://be-the-bear.kait0.workers.dev/)**
 
-![雪山のコースを滑るクマと、前方に並ぶコイン。プレイ中は画面上部にタイムとスコアが表示されます。](docs/be-the-bear-slidev/public/images/demo-game.png)
-
-## キーボードでのプレイ例
-
 ![左に移動してコインの列を横切り、右に切り返してからSpaceキーでジャンプする実際のプレイ映像。下端に押しているキーを表示。](docs/images/keyboard-play.gif)
 
 ## 遊び方
