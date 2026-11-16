@@ -1,5 +1,6 @@
 import {build} from 'vite';
-import {mkdir,writeFile,access,copyFile} from 'node:fs/promises';
+import { buildWorker } from './worker-bundle.mjs';
+import {mkdir,writeFile,access} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {dirname,join,resolve} from 'node:path';
@@ -18,11 +19,7 @@ if(cert){await access(resolve(cert));await access(resolve(key));}
 await mkdir(runtime,{recursive:true});
 await build({configFile:false,root:join(root,'web'),publicDir:'public',
  build:{outDir:join(runtime,'client'),emptyOutDir:true}});
-await build({configFile:false,root,publicDir:false,
- build:{outDir:join(runtime,'server'),emptyOutDir:true,minify:false,target:'es2022',
-  lib:{entry:join(root,'worker/index.js'),formats:['es'],fileName:()=> 'index.js'},
-  rollupOptions:{output:{banner:'/* @noble/hashes: Copyright (c) 2022 Paul Miller. MIT License. */'}}}});
-await copyFile(join(root,'NOBLE-HASHES-LICENSE.txt'),join(runtime,'server/NOBLE-HASHES-LICENSE.txt'));
+await buildWorker(join(runtime, 'server'), { emptyOutDir: true });
 await writeFile(configPath,JSON.stringify({
  name:'bear-ski-local-auth',
  main:'./server/index.js',compatibility_date:'2026-10-12',no_bundle:true,
