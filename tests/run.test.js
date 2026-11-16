@@ -27,7 +27,7 @@ function assertBufferEqual(actual,expected,message){
   if(!Object.is(actual[i],expected[i]))assert.equal(actual[i],expected[i],message+': 要素 '+i);
  }
 }
-function game(captureKeys=false){const elements=new Map(),saved=[];const element=id=>{if(!elements.has(id))elements.set(id,{style:{},classList:{values:new Set(),toggle(k,force){if(force??!this.values.has(k))this.values.add(k);else this.values.delete(k);},add(k){this.values.add(k);},remove(k){this.values.delete(k);},contains(k){return this.values.has(k);}},setAttribute(k,v){this[k]=v;},setPointerCapture(){},focus(){},append(){},innerHTML:'',textContent:'',getContext(){return new Proxy({},{get:()=>()=>{},set:()=>true});}});return elements.get(id);};let viewCamera=null,viewScene=null;class Renderer{constructor(){this.shadowMap={};}setPixelRatio(){}setSize(){}render(scene,camera){viewScene=scene;viewCamera=camera;camera.updateMatrixWorld();}}let time=0;const ctx=vm.createContext({lobbyActionLayout,coinIcon,createMenuArtwork,bindViewportUI,createMenuScene,MENU_SLOPE,createRunSimulation,MAX_X,initI18n:()=>{},preferences,createSound,createTitleCabin,projectTarget,groundTitleBear,restoreTitlePoles,THREE:{...Three,WebGLRenderer:Renderer},AutoCalibration,calibrationHint,JumpDetector,MotionExperiment,mountAuthUI:()=>({refresh(){}}),PoseRecording,compareRecording,validateRecording,summarizeExperiment,formatTime,poseMeasures,fullBody,upperBody,drawSkeleton,poseControls,PoseCamera:class{constructor(options){this.options=options;this.starts=0;}async start(){this.starts++;return false;}sample(now){if(this.result)this.options.onResult(this.result,now);}stop(){}},scarfColors:[],createAccount(change){const profile={coins:0,bestMs:null,owned:[],equipped:'none'};return {data:profile,async load(){change(profile);},async save(run){saved.push({...run});profile.coins+=run.coins;profile.bestMs=run.timeMs;change(profile);return profile;},open(){profile.opens=(profile.opens??0)+1;return true;}};},document:{getElementById:element,body:element('body'),listeners:{},addEventListener(name,handler){(this.listeners[name]??=[]).push(handler);}},window:{listeners:{},addEventListener(name,handler){if(captureKeys)this.listeners[name]=handler;}},innerWidth:1000,innerHeight:800,devicePixelRatio:1,performance:{now:()=>time},crypto:globalThis.crypto,structuredClone,requestAnimationFrame(){},addEventListener(){},setTimeout(){},console});const source=readFileSync(new URL('../web/game.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'');for(const file of ['game-input.js','course.js','course-surface.js','ski-atmosphere.js','jump-flight.js','collectibles.js','ramps.js','game-ui.js','alpine-scenery.js','finish-line.js','resort-scene.js','ski-world.js']){const module=readFileSync(new URL('../web/'+file,import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/export /g,'');vm.runInContext(module,ctx);}vm.runInContext(source,ctx);
+function game(captureKeys=false){const elements=new Map(),saved=[];const element=id=>{if(!elements.has(id))elements.set(id,{style:{},classList:{values:new Set(),toggle(k,force){if(force??!this.values.has(k))this.values.add(k);else this.values.delete(k);},add(k){this.values.add(k);},remove(k){this.values.delete(k);},contains(k){return this.values.has(k);}},setAttribute(k,v){this[k]=v;},setPointerCapture(){},focus(){},append(){},innerHTML:'',textContent:'',getContext(){return new Proxy({},{get:()=>()=>{},set:()=>true});}});return elements.get(id);};let viewCamera=null,viewScene=null;class Renderer{constructor(){this.shadowMap={};}setPixelRatio(){}setSize(){}render(scene,camera){viewScene=scene;viewCamera=camera;camera.updateMatrixWorld();}}let time=0;const ctx=vm.createContext({lobbyActionLayout,coinIcon,createMenuArtwork,bindViewportUI,createMenuScene,MENU_SLOPE,createRunSimulation,MAX_X,initI18n:()=>{},preferences,createSound,createTitleCabin,projectTarget,groundTitleBear,restoreTitlePoles,THREE:{...Three,WebGLRenderer:Renderer},AutoCalibration,calibrationHint,JumpDetector,MotionExperiment,mountAuthUI:()=>({refresh(){}}),PoseRecording,compareRecording,validateRecording,summarizeExperiment,formatTime,poseMeasures,fullBody,upperBody,drawSkeleton,poseControls,PoseCamera:class{constructor(options){this.options=options;this.starts=0;}async start(){this.starts++;return false;}sample(now){if(this.result)this.options.onResult(this.result,now);}stop(){}},scarfColors:[],createAccount(change){const profile={coins:0,bestMs:null,owned:[],equipped:'none'};return {data:profile,async load(){change(profile);},async save(run){saved.push({...run});profile.coins+=run.coins;profile.bestMs=run.timeMs;change(profile);return profile;},open(){profile.opens=(profile.opens??0)+1;return true;}};},document:{getElementById:element,body:element('body'),listeners:{},addEventListener(name,handler){(this.listeners[name]??=[]).push(handler);}},window:{listeners:{},addEventListener(name,handler){if(captureKeys)this.listeners[name]=handler;}},innerWidth:1000,innerHeight:800,devicePixelRatio:1,performance:{now:()=>time},crypto:globalThis.crypto,structuredClone,requestAnimationFrame(){},addEventListener(){},setTimeout(){},console});const source=readFileSync(new URL('../web/game.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'');for(const file of ['game-camera.js','game-input.js','course.js','course-surface.js','ski-atmosphere.js','jump-flight.js','collectibles.js','ramps.js','game-ui.js','alpine-scenery.js','finish-line.js','resort-scene.js','ski-world.js']){const module=readFileSync(new URL('../web/'+file,import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/export /g,'');vm.runInContext(module,ctx);}vm.runInContext(source,ctx);
 // 旧UI統合テストの操作名を公開stateへ接続。新しい物理テストはfactoryを直接利用する。
 const runState=vm.runInContext('simulation.state',ctx);
 for(const key of Object.keys(runState))Object.defineProperty(ctx,key,{get:()=>runState[key],set:value=>{runState[key]=value;},configurable:true});
@@ -39,32 +39,32 @@ test('pause stops time, tuck shortens the run, slow frames use full elapsed time
 
 test('lost camera tracking recalibrates automatically and resumes same run',async()=>{
 const g=game();await Promise.resolve();
-g.run("begin();state='playing';mode='camera';distance=500;elapsed=30;score=150;crystals=4;lastPoseAt=0;");const id=g.run('runId');g.frame(1600);
-assert.equal(g.run('state'),'setup');assert.equal(g.run('resumeAfterCalibration'),true);assert.equal(g.run('distance'),500);assert.equal(g.run('elapsed'),30);assert.equal(g.run('crystals'),4);
+g.run("begin();state='playing';mode='camera';distance=500;elapsed=30;score=150;crystals=4;camera.lastPoseAt=0;");const id=g.run('runId');g.frame(1600);
+assert.equal(g.run('state'),'setup');assert.equal(g.run('camera.resumeAfterCalibration'),true);assert.equal(g.run('distance'),500);assert.equal(g.run('elapsed'),30);assert.equal(g.run('crystals'),4);
 const p=Array.from({length:33},()=>({x:.5,y:.4,visibility:1}));p[0].y=.1;
 for(const [a,b,y] of [[11,12,.3],[23,24,.5],[25,26,.68],[27,28,.85]]){p[a]={x:.46,y,visibility:1};p[b]={x:.54,y,visibility:1};}
-g.element('video').readyState=2;g.run(`cameraReady=true;poseCamera.result={landmarks:[${JSON.stringify(p)}],worldLandmarks:[]};`);
+g.element('video').readyState=2;g.run(`camera.ready=true;camera.device.result={landmarks:[${JSON.stringify(p)}],worldLandmarks:[]};`);
 for(let i=0;i<35&&g.run('state')==='setup';i++)g.frame(100);
 assert.equal(g.run('state'),'countdown');assert.equal(g.run('runId'),id);assert.equal(g.run('distance'),500);assert.equal(g.run('elapsed'),30);
 for(let i=0;i<35&&g.run('state')==='countdown';i++)g.frame(100);
 assert.equal(g.run('state'),'playing');assert.equal(g.run('runId'),id);assert.equal(g.run('crystals'),4);assert.ok(g.run('distance')>500);assert.ok(g.run('elapsed')<30.2);
 });
-test('camera steering responds within one tenth of a second',async()=>{const g=game();await Promise.resolve();g.run("begin();state='playing';mode='camera';poseSteer=1;poseTuck=1;");g.run('simulate(.1)');assert.ok(g.run('steer')>.9);assert.ok(g.run('tuck')>.85);});
+test('camera steering responds within one tenth of a second',async()=>{const g=game();await Promise.resolve();g.run("begin();state='playing';mode='camera';camera.steer=1;camera.tuck=1;");g.run('simulate(.1)');assert.ok(g.run('steer')>.9);assert.ok(g.run('tuck')>.85);});
 
 test('early camera takeoff starts physics immediately and records the next ascent render',()=>{
- const g=game();g.run("begin();state='playing';mode='camera';cameraReady=true;baseline={hipX:.5,hipY:.5,shoulderY:.3,torso:.2,lean:0,leftFoot:.85,rightFoot:.85};objects.forEach(o=>{o.userData.offset=100;o.userData.along=10000;});");
+ const g=game();g.run("begin();state='playing';mode='camera';camera.ready=true;camera.baseline={hipX:.5,hipY:.5,shoulderY:.3,torso:.2,lean:0,leftFoot:.85,rightFoot:.85};objects.forEach(o=>{o.userData.offset=100;o.userData.along=10000;});");
  const input=(time,rise)=>{
   const p=Array.from({length:33},()=>({x:.5,y:.4,visibility:1}));
   for(const i of [11,12])p[i].y=.3-rise;
   for(const i of [23,24])p[i].y=.5-rise;
   for(const i of [27,28]){p[i].y=.85;p[i].visibility=.1;}
-  g.run(`handlePose({landmarks:[${JSON.stringify(p)}],worldLandmarks:[]},${time})`);
+  g.run(`camera.handlePose({landmarks:[${JSON.stringify(p)}],worldLandmarks:[]},${time})`);
  };
  input(0,0);g.frame(33);input(33,.0055);assert.equal(g.run('jumps'),0);
  g.frame(33);input(66,.012);assert.equal(g.run('jumps'),1);assert.ok(g.run('vy')>13);
- assert.equal(g.run('jumpDetector.diagnostics().path'),'upper-velocity');assert.equal(g.run('jumpTiming.accepted'),true);
- assert.equal(g.run('jumpTiming.detectedToRenderMs'),null);
- g.frame(16);assert.ok(g.run('vertical')>.2);assert.equal(g.run('jumpTiming.detectedToRenderMs'),16);
+ assert.equal(g.run('camera.jumpDetector.diagnostics().path'),'upper-velocity');assert.equal(g.run('camera.jumpTiming.accepted'),true);
+ assert.equal(g.run('camera.jumpTiming.detectedToRenderMs'),null);
+ g.frame(16);assert.ok(g.run('vertical')>.2);assert.equal(g.run('camera.jumpTiming.detectedToRenderMs'),16);
  input(82,.014);assert.equal(g.run('jumps'),1);
 });
 
@@ -85,7 +85,7 @@ test('timed manual jump before or just after takeoff boosts once, early jump doe
 });
 test('pause and recalibration freeze a ramp flight and a new run clears boost state',()=>{
  const g=rampGame();advance(g,330.3);g.run('pause()');const y=g.run('vertical'),d=g.run('distance');g.frame(1000);assert.equal(g.run('vertical'),y);assert.equal(g.run('distance'),d);
- g.run("mode='camera';enterCalibration(true)");g.frame(1000);assert.equal(g.run('vertical'),y);assert.equal(g.run('distance'),d);
+ g.run("mode='camera';camera.enterCalibration(true)");g.frame(1000);assert.equal(g.run('vertical'),y);assert.equal(g.run('distance'),d);
  g.run('begin(true)');assert.equal(g.run('vertical'),0);assert.equal(g.run('rampLaunchTime'),-Infinity);assert.equal(g.run('rampBoosted'),false);
 });
 
@@ -101,27 +101,27 @@ test('money bags require high flight, award ten once, reset and persist',()=>{
  }
 });
 test('camera control smoothing reaches 90 percent within 70ms',()=>{
- const g=game();g.run("begin();state='playing';mode='camera';poseSteer=1;poseTuck=1;simulate(.07)");
+ const g=game();g.run("begin();state='playing';mode='camera';camera.steer=1;camera.tuck=1;simulate(.07)");
  assert.ok(g.run('steer')>.9);assert.ok(g.run('tuck')>.9);
 });
 
 test('camera lean keeps moving and neutral stops in place without recentering',()=>{
  for(const speed of [25.5,46.5]){
-  const g=game();g.run(`begin();state='playing';mode='camera';speed=${speed};poseSteer=1;poseInputValid=true;objects.forEach(o=>o.userData.along=10000);`);
+  const g=game();g.run(`begin();state='playing';mode='camera';speed=${speed};camera.steer=1;camera.valid=true;objects.forEach(o=>o.userData.along=10000);`);
   g.run('simulate(.1)');const first=g.run('playerX');assert.ok(first>0&&first<13);
   g.run('simulate(.1)');assert.ok(g.run('playerX')>first);
-  const stopped=g.run('playerX');g.run('poseSteer=0;simulate(.1)');assert.equal(g.run('playerX'),stopped);
+  const stopped=g.run('playerX');g.run('camera.steer=0;simulate(.1)');assert.equal(g.run('playerX'),stopped);
   for(let i=0;i<60;i++)g.run('simulate(1/60)');assert.equal(g.run('playerX'),stopped);
-  g.run('poseSteer=-1;simulate(.1)');assert.ok(g.run('playerX')<stopped);
+  g.run('camera.steer=-1;simulate(.1)');assert.ok(g.run('playerX')<stopped);
   for(let i=0;i<300;i++)g.run('simulate(1/60)');assert.equal(g.run('playerX'),-g.run('MAX_X'));
  }
 });
 
 test('stale camera input and paused calibration hold lateral position',()=>{
- const g=game();g.run("begin();state='playing';mode='camera';cameraReady=false;lastPoseAt=0;playerX=8;poseInputValid=true;");
- g.frame(400);assert.equal(g.run('playerX'),8);assert.equal(g.run('poseInputValid'),false);
- g.run('enterCalibration(true)');g.frame(500);assert.equal(g.run('playerX'),8);
- g.run("state='paused';poseInputValid=true");g.frame(100);assert.equal(g.run('playerX'),8);
+ const g=game();g.run("begin();state='playing';mode='camera';camera.ready=false;camera.lastPoseAt=0;playerX=8;camera.valid=true;");
+ g.frame(400);assert.equal(g.run('playerX'),8);assert.equal(g.run('camera.valid'),false);
+ g.run('camera.enterCalibration(true)');g.frame(500);assert.equal(g.run('playerX'),8);
+ g.run("state='paused';camera.valid=true");g.frame(100);assert.equal(g.run('playerX'),8);
 });
 
 test('keyboard holds its position when the direction key is released',()=>{
@@ -152,7 +152,7 @@ test('jump camera leaves visible player ascent and tracks the ramp surface',()=>
 });
 
 test('motion check pauses gameplay and automatically reports replay after its timer',()=>{
- const g=game();g.run("begin();state='playing';mode='camera';cameraReady=true;baseline={hipX:.5,hipY:.5,shoulderY:.3,torso:.2,lean:0,leftFoot:.85,rightFoot:.85};");
+ const g=game();g.run("begin();state='playing';mode='camera';camera.ready=true;camera.baseline={hipX:.5,hipY:.5,shoulderY:.3,torso:.2,lean:0,leftFoot:.85,rightFoot:.85};");
  g.element('recording-open').onclick();assert.equal(g.run('state'),'paused');
  g.element('recording-label').value='jump';g.element('recording-start').onclick();g.frame(5000);
  assert.equal(g.run('poseRecording.phase'),'recording');
@@ -160,17 +160,17 @@ test('motion check pauses gameplay and automatically reports replay after its ti
  g.frame(20000);assert.equal(g.run('state'),'paused');assert.equal(g.run('distance'),0);
  assert.equal(g.run('poseRecording.phase'),'done');assert.match(g.element('recording-summary').textContent,/標準：1回/);
  assert.equal(g.run('window.bearSkiLastReplay().runs[0].count'),1);
- g.element('jump-filter').value='one-euro';g.element('jump-filter').onchange();assert.equal(g.run('jumpDetector.filter'),'one-euro');
+ g.element('jump-filter').value='one-euro';g.element('jump-filter').onchange();assert.equal(g.run('camera.jumpDetector.filter'),'one-euro');
  g.element('recording-close').onclick();assert.equal(g.run('recordingOpen'),false);
 });
 
 test('switching inference backend recalibrates and retains the current run',async()=>{
- const g=game();g.run("begin();state='playing';mode='camera';cameraReady=true;distance=500;elapsed=20;crystals=7;playerX=4;baseline={hipY:.5};poseCamera.diagnostics=()=>({delegate:'GPU',inferenceMedianMs:88,poseFps:8});poseCamera.start=async()=>true;");
+ const g=game();g.run("begin();state='playing';mode='camera';camera.ready=true;distance=500;elapsed=20;crystals=7;playerX=4;camera.baseline={hipY:.5};camera.device.diagnostics=()=>({delegate:'GPU',inferenceMedianMs:88,poseFps:8});camera.device.start=async()=>true;");
  const id=g.run('runId');g.element('recording-open').onclick();await g.element('inference-switch').onclick();
- assert.equal(g.run('poseCamera.preferredDelegate'),'CPU');assert.equal(g.run('state'),'setup');
- assert.equal(g.run('resumeAfterCalibration'),true);assert.equal(g.run('recordingOpen'),false);
+ assert.equal(g.run('camera.device.preferredDelegate'),'CPU');assert.equal(g.run('state'),'setup');
+ assert.equal(g.run('camera.resumeAfterCalibration'),true);assert.equal(g.run('recordingOpen'),false);
  assert.equal(g.run('distance'),500);assert.equal(g.run('elapsed'),20);assert.equal(g.run('crystals'),7);assert.equal(g.run('playerX'),4);assert.equal(g.run('runId'),id);
- assert.equal(g.run('baseline'),null);assert.equal(g.run('engineBaseline.inferenceMs'),88);
+ assert.equal(g.run('camera.baseline'),null);assert.equal(g.run('engineBaseline.inferenceMs'),88);
 });
 
 test('goal crossing freezes records for normal, tucked and airborne runs at every lateral edge',()=>{
@@ -197,15 +197,15 @@ test('keyboard starts directly; pause help shows only selected controls',()=>{
  assert.match(g.element('help-controls').innerHTML,/体の重心を左右へ移す/);assert.match(g.element('help-controls').innerHTML,/その位置で止まる/);assert.doesNotMatch(g.element('help-controls').innerHTML,/Space/);
 });
 test('scan never issues controls, duplicate frames do not advance and readiness is brief',()=>{
- const g=game();g.run("begin();state='playing';mode='camera';distance=500;elapsed=20;crystals=7;playerX=4;cameraReady=true;enterCalibration(true)");
+ const g=game();g.run("begin();state='playing';mode='camera';distance=500;elapsed=20;crystals=7;playerX=4;camera.ready=true;camera.enterCalibration(true)");
  const id=g.run('runId'),p=Array.from({length:33},()=>({x:.5,y:.1,visibility:1}));
  for(const [a,b,y] of [[11,12,.3],[23,24,.5],[25,26,.68],[27,28,.85]]){p[a]={x:.46,y,visibility:1};p[b]={x:.54,y,visibility:1};}
- const send=t=>g.run(`handlePose({landmarks:[${JSON.stringify(p)}],worldLandmarks:[]},${t})`);
+ const send=t=>g.run(`camera.handlePose({landmarks:[${JSON.stringify(p)}],worldLandmarks:[]},${t})`);
  for(let i=0;i<11;i++){send(i*100);send(i*100);}
- assert.equal(g.run('state'),'setup');assert.equal(g.run('autoCal.samples.length'),11);assert.equal(g.run('poseInputValid'),false);assert.equal(g.run('jumps'),0);
+ assert.equal(g.run('state'),'setup');assert.equal(g.run('camera.calibration.samples.length'),11);assert.equal(g.run('camera.valid'),false);assert.equal(g.run('jumps'),0);
  assert.equal(g.run('playerX'),4);assert.equal(g.run('distance'),500);send(1100);
- assert.equal(g.run('state'),'countdown');assert.equal(g.run('countTime'),.6);assert.equal(g.element('countdown').textContent,'準備OK');assert.equal(g.run('scanReport.samples'),12);
- assert.equal(g.run('runId'),id);assert.equal(g.run('poseInputValid'),false);assert.equal(g.run('crystals'),7);
+ assert.equal(g.run('state'),'countdown');assert.equal(g.run('countTime'),.6);assert.equal(g.element('countdown').textContent,'準備OK');assert.equal(g.run('camera.scanReport.samples'),12);
+ assert.equal(g.run('runId'),id);assert.equal(g.run('camera.valid'),false);assert.equal(g.run('crystals'),7);
 });
 test('HUD keeps course progress and coin totals without remaining-distance copy',()=>{
  const g=game();g.run("updateHUD({elapsed:0,crystals:12,distance:1410,score:0,courseLength:1500})");
@@ -215,10 +215,10 @@ test('HUD keeps course progress and coin totals without remaining-distance copy'
 });
 
 test('automatic inference recovery starts scanning and preserves the current run',()=>{
- const g=game();g.run("begin();state='playing';mode='camera';cameraReady=true;distance=720;elapsed=30;playerX=-7;crystals=9;poseInputValid=true");
- const id=g.run('runId');g.run("poseCamera.options.onPhase('recovering')");
- assert.equal(g.run('state'),'setup');assert.equal(g.run('resumeAfterCalibration'),true);assert.equal(g.run('runId'),id);
- assert.equal(g.run('distance'),720);assert.equal(g.run('crystals'),9);assert.equal(g.run('playerX'),-7);assert.equal(g.run('poseInputValid'),false);
+ const g=game();g.run("begin();state='playing';mode='camera';camera.ready=true;distance=720;elapsed=30;playerX=-7;crystals=9;camera.valid=true");
+ const id=g.run('runId');g.run("camera.device.options.onPhase('recovering')");
+ assert.equal(g.run('state'),'setup');assert.equal(g.run('camera.resumeAfterCalibration'),true);assert.equal(g.run('runId'),id);
+ assert.equal(g.run('distance'),720);assert.equal(g.run('crystals'),9);assert.equal(g.run('playerX'),-7);assert.equal(g.run('camera.valid'),false);
 });
 
 test('only rocks are cleared from the finish approach; coins remain collectible until crossing',()=>{
@@ -228,23 +228,23 @@ test('only rocks are cleared from the finish approach; coins remain collectible 
 
 test('bear entry chooses controls without starting camera and can return home',async()=>{
  const g=game();await Promise.resolve();
- g.element('bear-start').onclick();assert.equal(g.run('state'),'title');assert.equal(g.run('poseCamera.starts'),0);
+ g.element('bear-start').onclick();assert.equal(g.run('state'),'title');assert.equal(g.run('camera.device.starts'),0);
  g.element('title-start').onclick();g.frame(400);assert.equal(g.run('state'),'lobby');
- g.element('play-button').onclick();assert.equal(g.run('state'),'choosing');assert.equal(g.run('poseCamera.starts'),0);
+ g.element('play-button').onclick();assert.equal(g.run('state'),'choosing');assert.equal(g.run('camera.device.starts'),0);
  g.element('control-cancel').onclick();assert.equal(g.run('state'),'lobby');
- g.element('bear-start').onclick();g.element('keyboard-start').onclick();assert.equal(g.run('state'),'countdown');assert.equal(g.run('poseCamera.starts'),0);
+ g.element('bear-start').onclick();g.element('keyboard-start').onclick();assert.equal(g.run('state'),'countdown');assert.equal(g.run('camera.device.starts'),0);
  g.element('bear-start').onclick();assert.equal(g.run('state'),'countdown');
- g.run('home()');g.element('bear-start').onclick();await g.element('camera-start').onclick();assert.equal(g.run('poseCamera.starts'),1);
+ g.run('home()');g.element('bear-start').onclick();await g.element('camera-start').onclick();assert.equal(g.run('camera.device.starts'),1);
  g.element('scan-home').onclick();assert.equal(g.run('state'),'lobby');g.element('lobby-title').onclick();assert.equal(g.run('state'),'title');
 });
 test('all inputs stay within ski-safe bounds and reverse immediately at either edge',()=>{
  for(const mode of ['camera','keyboard','touch'])for(const side of [-1,1]){
-  const g=game();g.run(`begin();state='playing';mode='${mode==='camera'?'camera':'keyboard'}';playerX=MAX_X*${side};steer=${side};poseInputValid=true;vertical=12;vy=5;speed=46.5;objects.forEach(o=>o.userData.along=10000);`);
-  if(mode==='camera')g.run(`poseSteer=${side};poseTuck=1;`);
+  const g=game();g.run(`begin();state='playing';mode='${mode==='camera'?'camera':'keyboard'}';playerX=MAX_X*${side};steer=${side};camera.valid=true;vertical=12;vy=5;speed=46.5;objects.forEach(o=>o.userData.along=10000);`);
+  if(mode==='camera')g.run(`camera.steer=${side};camera.tuck=1;`);
   else {if(mode==='touch')g.element(side<0?'touch-left':'touch-right').onpointerdown({pointerId:1});else g.run(`keys.add('${side<0?'ArrowLeft':'ArrowRight'}')`);g.run("keys.add('ArrowDown')");}
   for(let n=0;n<10;n++)g.run('simulate(.4)');
   assert.equal(g.run('playerX'),side*g.run('MAX_X'));
-  g.run(`keys.clear();poseSteer=${-side};keys.add('${side<0?'ArrowRight':'ArrowLeft'}');simulate(1/120)`);
+  g.run(`keys.clear();camera.steer=${-side};keys.add('${side<0?'ArrowRight':'ArrowLeft'}');simulate(1/120)`);
   assert.ok(Math.abs(g.run('playerX'))<g.run('MAX_X'));
  }
  const g=game();assert.ok(g.run('MAX_X')>=10);assert.equal(g.run('MAX_X+COURSE.playerHalfWidth+COURSE.edgeMargin'),22);
@@ -269,7 +269,7 @@ test('bear and skis fit within the reserved lateral envelope in all poses',()=>{
 });
 
 test('keyboard fallback after tracking loss directly resumes the same run pose',()=>{
- const g=game();g.run("begin();state='playing';mode='camera';distance=500;elapsed=20;playerX=-8;vertical=7;vy=4;enterCalibration(true);");
+ const g=game();g.run("begin();state='playing';mode='camera';distance=500;elapsed=20;playerX=-8;vertical=7;vy=4;camera.enterCalibration(true);");
  const id=g.run('runId');g.element('cancel-camera').onclick();g.frame(100);
  assert.equal(g.run('state'),'countdown');assert.equal(g.run('playerX'),-8);assert.equal(g.run('vertical'),7);assert.equal(g.run('distance'),500);
  assert.equal(g.run('runId'),id);assert.equal(g.run('playerX'),-8);assert.equal(g.run('vertical'),7);
@@ -318,7 +318,7 @@ test('title framing and snow blending restore the prior playing camera and model
 test('visible overlays disable both scene entries including keyboard activation',async()=>{
  const g=game();await Promise.resolve();g.element('title-start').onclick();g.frame(400);g.ctx.document.querySelector=()=>({});
  g.frame(16);assert.equal(g.element('start').inert,true);assert.equal(g.element('bear-start').disabled,true);assert.equal(g.element('shop-open').disabled,true);
- g.element('bear-start').onclick();g.element('shop-open').onclick();assert.equal(g.run('state'),'lobby');assert.equal(g.run('account.data.opens'),undefined);assert.equal(g.run('poseCamera.starts'),0);
+ g.element('bear-start').onclick();g.element('shop-open').onclick();assert.equal(g.run('state'),'lobby');assert.equal(g.run('account.data.opens'),undefined);assert.equal(g.run('camera.device.starts'),0);
  g.ctx.document.querySelector=()=>null;g.frame(16);assert.equal(g.element('start').inert,false);assert.equal(g.element('bear-start').disabled,false);
 });
 test('help contains detailed body instructions and actual keyboard mappings without blocking scanning',()=>{
@@ -334,8 +334,8 @@ test('front-facing body directions match unmirrored camera coordinates and stop 
  // Facing the camera, the person's left is positive x in the raw camera frame.
  const left=poseControls(m,baseline),right=poseControls({...m,hipX:.44},baseline);
  assert.ok(left.steer<0);assert.ok(right.steer>0);
- const g=game();g.run(`begin();state='playing';mode='camera';poseInputValid=true;poseSteer=${left.steer};simulate(.1)`);
- const x=g.run('playerX');assert.ok(x<0);g.run('poseSteer=0;simulate(.1)');assert.equal(g.run('playerX'),x);
+ const g=game();g.run(`begin();state='playing';mode='camera';camera.valid=true;camera.steer=${left.steer};simulate(.1)`);
+ const x=g.run('playerX');assert.ok(x<0);g.run('camera.steer=0;simulate(.1)');assert.equal(g.run('playerX'),x);
  assert.equal(poseControls({...m,shoulderY:.4,lean:.3},baseline).tuck,1);
 });
 
@@ -436,7 +436,7 @@ test('game routes distinct sounds and stops audio for pause, scan, goal and retr
  const g=game();g.run("var heard=[],stops=0,glides=[];audio.play=e=>heard.push(e);audio.stop=()=>stops++;audio.updateGlide=e=>glides.push(e);begin();state='playing';objects.forEach(o=>o.userData.along=10000);jump()");
  assert.equal(g.run('heard.at(-1)'),'jump');g.frame(100);assert.equal(g.run('glides.at(-1).active'),true);
  g.run('pause()');assert.ok(g.run('stops')>=2);g.frame(100);assert.equal(g.run('glides.at(-1).active'),false);
- g.run("state='playing';enterCalibration(true)");assert.ok(g.run('stops')>=3);
+ g.run("state='playing';camera.enterCalibration(true)");assert.ok(g.run('stops')>=3);
  g.run("mode='keyboard';begin();state='playing';objects.forEach(o=>o.userData.along=10000);Object.assign(objects[0].userData,{type:'crystal',along:1,offset:0,collected:false});simulate(1/60)");
  assert.equal(g.run('heard.at(-1)'),'coin');
  g.run("Object.assign(bags[1].userData,{along:distance+1,height:2,collected:false});simulate(1/60)");
@@ -455,16 +455,16 @@ import {drawSkeleton} from '../web/pose-overlay.js';
 test('Enter opens the lobby without camera access; returning to title keeps account data',async()=>{
  const g=game(true);await Promise.resolve();let prevented=0;
  g.run('account.data.coins=43');g.ctx.window.listeners.keydown({code:'Enter',repeat:false,target:{},preventDefault(){prevented++;}});
- assert.equal(g.run('state'),'lobby');assert.equal(prevented,1);assert.equal(g.run('poseCamera.starts'),0);
+ assert.equal(g.run('state'),'lobby');assert.equal(prevented,1);assert.equal(g.run('camera.device.starts'),0);
  g.ctx.window.listeners.keyup({code:'Enter',preventDefault(){}});g.frame(400);
  g.element('lobby-title').onclick();assert.equal(g.run('state'),'title');assert.equal(g.run('account.data.coins'),43);
  g.element('title-start').onclick();g.frame(400);g.element('play-button').onclick();g.element('keyboard-start').onclick();
- assert.equal(g.run('state'),'countdown');assert.equal(g.run('poseCamera.starts'),0);
+ assert.equal(g.run('state'),'countdown');assert.equal(g.run('camera.device.starts'),0);
 });
 test('pause and rescan retain main-course pickups; retry restores the original pool',()=>{
  const g=game();g.run("begin();state='playing';distance=600;crystals=12;objects[0].userData.collected=true;");
  const id=g.run('runId');g.run('pause()');g.frame(500);assert.equal(g.run('distance'),600);
- g.run("mode='camera';enterCalibration(true)");g.frame(1000);assert.equal(g.run('crystals'),12);assert.equal(g.run('runId'),id);
+ g.run("mode='camera';camera.enterCalibration(true)");g.frame(1000);assert.equal(g.run('crystals'),12);assert.equal(g.run('runId'),id);
  g.run('begin(false)');assert.equal(g.run('objects[0].userData.collected'),true);assert.equal(g.run('runId'),id);
  g.run('begin(true)');assert.equal(g.run('objects.length'),g.run('COURSE.objectCount'));assert.equal(g.run('objects[0].userData.collected'),false);assert.equal(g.run('distance'),0);
 });
@@ -565,12 +565,12 @@ test('notch inset changes update the actual menu targets on rotation',()=>{
 
 test('scan phases distinguish preparation, fresh missing poses, interruption, recovery and errors',async()=>{
  const g=game();await Promise.resolve();g.run('home()');g.element('bear-start').onclick();await g.element('camera-start').onclick();
- assert.equal(g.run('state'),'setup');assert.equal(g.run('poseCamera.starts'),1);assert.equal(g.run('scanPhase'),'preparing');
- g.frame(900);assert.equal(g.run('scanPhase'),'preparing');
- g.run("cameraReady=true;handlePose({landmarks:[],worldLandmarks:[]},900)");assert.equal(g.run('scanPhase'),'missing');
- g.frame(800);assert.equal(g.run('scanPhase'),'interrupted');assert.equal(g.run('poseInputValid'),false);
- g.run("poseCamera.options.onPhase('recovering')");g.frame(900);assert.equal(g.run('scanPhase'),'preparing');
- g.run("cameraError({name:'NotAllowedError'})");assert.equal(g.run('scanPhase'),'error');assert.match(g.element('camera-status').textContent,/許可/);
+ assert.equal(g.run('state'),'setup');assert.equal(g.run('camera.device.starts'),1);assert.equal(g.run('camera.scanPhase'),'preparing');
+ g.frame(900);assert.equal(g.run('camera.scanPhase'),'preparing');
+ g.run("camera.ready=true;camera.handlePose({landmarks:[],worldLandmarks:[]},900)");assert.equal(g.run('camera.scanPhase'),'missing');
+ g.frame(800);assert.equal(g.run('camera.scanPhase'),'interrupted');assert.equal(g.run('camera.valid'),false);
+ g.run("camera.device.options.onPhase('recovering')");g.frame(900);assert.equal(g.run('camera.scanPhase'),'preparing');
+ g.run("camera.handleError({name:'NotAllowedError'})");assert.equal(g.run('camera.scanPhase'),'error');assert.match(g.element('camera-status').textContent,/許可/);
  g.element('scan-home').onclick();assert.equal(g.run('state'),'lobby');
 });
 
@@ -639,14 +639,14 @@ test('language control is lobby-only; title and scan have no topbar',()=>{
  g.run("state='lobby'");g.ctx.document.querySelector=()=>({id:'help'});g.frame(1);assert.equal(g.element('language-switch').classList.contains('hidden'),true);
 });
 test('scan presents one short state message and stops its activity state without fresh recognition',()=>{
- const g=game();g.run("cameraReady=true;enterCalibration(false)");
- g.run("updateScanHint('少し静止してください',1)");assert.equal(g.element('camera-status').textContent,'スキャン中');
- g.run("updateScanHint('少し静止してください',.4)");assert.equal(g.element('camera-status').textContent,'少し静止してください');
- g.run("updateScanHint('全身を映してください',0)");assert.equal(g.element('camera-status').textContent,'全身を映してください');
- g.run("setScanPhase('collecting');lastScanResultAt=0");g.frame(800);assert.equal(g.element('setup')['data-scan-phase'],'interrupted');assert.equal(g.element('camera-status').textContent,'認識結果を待っています…');
- g.run("poseCamera.options.onPhase('model')");assert.equal(g.element('setup')['data-scan-phase'],'preparing');assert.equal(g.element('camera-status').textContent,'姿勢認識モデルを準備中…');
- g.run("cameraError({name:'NotAllowedError'})");assert.equal(g.element('setup')['data-scan-phase'],'error');assert.match(g.element('camera-status').textContent,/許可/);assert.equal(g.element('cancel-camera').hidden,false);
- g.element('scan-home').onclick();assert.equal(g.run('state'),'lobby');assert.equal(g.run('cameraReady'),false);
+ const g=game();g.run("camera.ready=true;camera.enterCalibration(false)");
+ g.run("camera.updateScanHint('少し静止してください',1)");assert.equal(g.element('camera-status').textContent,'スキャン中');
+ g.run("camera.updateScanHint('少し静止してください',.4)");assert.equal(g.element('camera-status').textContent,'少し静止してください');
+ g.run("camera.updateScanHint('全身を映してください',0)");assert.equal(g.element('camera-status').textContent,'全身を映してください');
+ g.run("camera.setScanPhase('collecting');camera.lastScanResultAt=0");g.frame(800);assert.equal(g.element('setup')['data-scan-phase'],'interrupted');assert.equal(g.element('camera-status').textContent,'認識結果を待っています…');
+ g.run("camera.device.options.onPhase('model')");assert.equal(g.element('setup')['data-scan-phase'],'preparing');assert.equal(g.element('camera-status').textContent,'姿勢認識モデルを準備中…');
+ g.run("camera.handleError({name:'NotAllowedError'})");assert.equal(g.element('setup')['data-scan-phase'],'error');assert.match(g.element('camera-status').textContent,/許可/);assert.equal(g.element('cancel-camera').hidden,false);
+ g.element('scan-home').onclick();assert.equal(g.run('state'),'lobby');assert.equal(g.run('camera.ready'),false);
  const markup=g.element('game').innerHTML;assert.doesNotMatch(markup,/auto-progress|auto-label|auto-calibration|role="progressbar"/);assert.match(markup,/scan-sweep/);
 });
 test('result hides ordinary save success while preserving warnings, retry errors and exact reward',async()=>{
@@ -701,4 +701,23 @@ test('startup never draws the legacy title while artwork is unavailable, then ga
  const camera=g.camera(),position=camera.position.toArray(),rotation=camera.quaternion.toArray();
  g.run("state='title'");g.frame(16);
  assert.deepEqual(camera.position.toArray(),position);assert.deepEqual(camera.quaternion.toArray(),rotation);
+});
+test('leaving setup ignores both success and failure from an earlier camera start', async () => {
+  for (const fail of [false, true]) {
+    const g = game();
+    let settle;
+    g.run('camera.device').start = () => new Promise((resolve, reject) => {
+      settle = () => (fail ? reject(new Error('late camera error')) : resolve(true));
+    });
+
+    const opening = g.element('camera-start').onclick();
+    g.element('scan-home').onclick();
+    settle();
+    await opening;
+
+    assert.equal(g.run('state'), 'lobby');
+    assert.equal(g.run('mode'), 'keyboard');
+    assert.equal(g.run('camera.ready'), false);
+    assert.equal(g.element('retry-camera').classList.contains('hidden'), true);
+  }
 });
