@@ -14,3 +14,28 @@ test('denied storage leaves a playable tab-only guest, and invalid saves cannot 
  const g=createGuestAccount({getItem(){throw Error('denied');},setItem(){throw Error('denied');}});const p=g.operation('run',run,course);assert.equal(p.durable,false);assert.equal(p.coins,30);assert.equal(g.operation('profile',null,course).coins,30);
  assert.throws(()=>g.operation('run',{...run,coins:99},course));assert.throws(()=>g.operation('run',{...run,runId:'short',coins:-1},course));
 });
+
+test('a retried guest run skips storage and a failed write keeps both runs in memory', () => {
+  let writes = 0;
+  let saved;
+  const guest = createGuestAccount({
+    getItem: () => saved,
+    setItem(key, value) {
+      writes += 1;
+      if (writes > 1) throw new Error('quota exceeded');
+      saved = value;
+    },
+  });
+
+  guest.operation('run', run, course);
+  guest.operation('run', run, course);
+  assert.equal(writes, 1);
+
+  const second = { ...run, runId: 'guest-run-000000000000001', coins: 180, timeMs: 30000 };
+  const profile = guest.operation('run', second, course);
+  assert.equal(profile.durable, false);
+  assert.equal(profile.coins, 210);
+  assert.equal(profile.bestMs, 30000);
+  assert.equal(guest.operation('run', second, course).coins, 210);
+  assert.equal(writes, 2);
+});

@@ -23,4 +23,4 @@
 
 ## プロジェクト資料
 
-[発表資料](docs/be-the-bear-slidev/README.md) · [設計概要](docs/architecture.md) · [素材・ライセンス](docs/assets.md)
+[設計概要](docs/architecture.md) · [素材・ライセンス](docs/assets.md)
