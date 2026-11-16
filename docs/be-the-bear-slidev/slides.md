@@ -339,7 +339,7 @@ class: hero
 <p style="font-size:21px;margin-top:20px">いつものPCで、体を動かす遊びを。</p>
 <div style="display:flex;align-items:center;gap:20px;margin-top:25px">
 <img class="qr" src="/images/play-qr.png" alt="ゲームを開くQRコード" />
-<div><a href="https://be-the-bear.jogi2026.workers.dev/" target="_blank" rel="noopener" style="font-size:17px;font-weight:700;color:#007fa5">遊んでみる ↗</a><p style="font-size:12px;line-height:1.6">be-the-bear.jogi2026.workers.dev</p><p class="small">チーム しゃりしゃり</p></div>
+<div><a href="https://be-the-bear.kait0.workers.dev/" target="_blank" rel="noopener" style="font-size:17px;font-weight:700;color:#007fa5">遊んでみる ↗</a><p style="font-size:12px;line-height:1.6">be-the-bear.kait0.workers.dev</p><p class="small">チーム しゃりしゃり</p></div>
 </div>
 </div>
 
