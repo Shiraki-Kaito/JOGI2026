@@ -54,8 +54,11 @@ export function createMenuArtwork(win,doc){
   if(image.complete){image.naturalWidth?resolve():reject();return;}
   image.addEventListener('load',resolve,{once:true});image.addEventListener('error',reject,{once:true});
  }).then(()=>image.decode());
- // 失敗時にも旧タイトルへ戻さず、初期背景を保つ。
- Promise.all(images.map(loaded)).then(()=>{ready=true;key='';}).catch(()=>{});
+ // 素材の取得・デコード失敗を表示し、再読み込みで開始し直せるようにする。
+ Promise.all(images.map(loaded)).then(()=>{ready=true;key='';}).catch(()=>{
+  const message=doc.getElementById('startup-message');
+  if(message)message.textContent='ゲームの画像を読み込めませんでした。通信状況を確認して再読み込みしてください。';
+ });
  win.addEventListener('resize',measure);measure();
  const hide=event=>{if(!event.persisted){win.removeEventListener('resize',measure);win.removeEventListener('pagehide',hide);}};
  win.addEventListener('pagehide',hide);
@@ -78,6 +81,8 @@ export function createMenuArtwork(win,doc){
    if(layout.title){
     doc.getElementById('title-start').disabled=false;
     doc.body.classList.toggle('menu-pending',false);
+    const status=doc.getElementById('startup-status');
+    if(status)status.hidden=true;
    }
    return true;
   }

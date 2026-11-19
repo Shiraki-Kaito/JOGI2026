@@ -47,6 +47,7 @@ test('menu artwork loads atomically, tracks resize, hides title shop and release
  assert.equal(f.node('bear-start').hidden,false);assert.equal(f.node('bear-start').disabled,true);
  assert.equal(f.node('menu-art').dataset.scene,'title');
  assert.equal(f.node('body').classList.values.has('menu-pending'),false);assert.equal(f.node('title-start').disabled,false);
+ assert.equal(f.node('startup-status').hidden,true);
  assert.equal(f.view.render('lobby'),true);assert.equal(f.node('shop-open').hidden,false);assert.equal(f.node('bear-start').hidden,false);
  const old=f.node('bear-start').style.left;
  f.win.innerWidth=390;f.win.innerHeight=844;f.events.get('resize')();f.view.render('lobby');assert.notEqual(f.node('bear-start').style.left,old);
@@ -55,7 +56,7 @@ test('menu artwork loads atomically, tracks resize, hides title shop and release
  f.view.render('lobby');assert.equal(f.node('menu-art').hidden,false);
 });
 test('a failed image keeps startup hidden instead of exposing the old title',async()=>{
- const f=fixture(true);await settle();assert.equal(f.view.render('title'),false);assert.equal(f.node('menu-art').hidden,true);
+ const f=fixture(true);await settle();assert.match(f.node('startup-message').textContent,/読み込めませんでした/);assert.equal(f.view.render('title'),false);assert.equal(f.node('menu-art').hidden,true);
  assert.equal(f.node('body').classList.values.has('menu-pending'),true);assert.equal(f.node('title-start').disabled,true);
 });
 test('cached images still wait for the displayed logo decode and a layout frame',async()=>{
@@ -72,6 +73,7 @@ test('cached images still wait for the displayed logo decode and a layout frame'
 test('decode rejection never reveals partial artwork or enables start',async()=>{
  const f=fixture();f.images[0].decode=()=>Promise.reject(new Error('decode failed'));
  await settle();assert.equal(f.view.render('title'),false);
+ assert.match(f.node('startup-message').textContent,/読み込めませんでした/);
  assert.equal(f.node('body').classList.values.has('menu-pending'),true);assert.equal(f.node('title-start').disabled,true);
 });
 test('scarf preview follows equipped color and can be removed without changing game data',()=>{
