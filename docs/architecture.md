@@ -92,6 +92,8 @@ D1はprofiles、runs、game_users、game_sessions、game_auth_limits、game_lega
 
 ## ビルドと公開構成
 
+GitHub Actionsでのテスト・ビルドと、公開版のブラウザー検証を再実行する方法は [検証手順](verification.md) にまとめています。
+
 Viteで画面を `dist/client/`、Workerを `dist/server/index.js` に生成します。ビルドコマンドは `npm.cmd run build`、自動テストは `npm.cmd test` です。Workerのビルド設定とライセンスの配置は [worker-bundle.mjs](../scripts/worker-bundle.mjs) にまとめています。
 
 D1の移行SQLは [drizzle/](../drizzle/) にあります。[wrangler.jsonc](../wrangler.jsonc) はD1のIDがダミーの設定例です。公開時には配信先のWorkerと既存D1に対応した設定を使います。`dev:auth` は専用のローカル設定とD1を作成します。

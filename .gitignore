@@ -10,3 +10,4 @@ dist/
 certs/
 *.key
 *.log
+.browser-results/
